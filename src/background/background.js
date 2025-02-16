@@ -838,8 +838,8 @@ async function getArticleFromDom(domString) {
     });
   });
 
-  dom.body.querySelectorAll('[markdownload-latex]')?.forEach(mathJax3Node =>  {
-    const tex = mathJax3Node.getAttribute('markdownload-latex')
+  dom.body.querySelectorAll('[marksnip-latex]')?.forEach(mathJax3Node =>  {
+    const tex = mathJax3Node.getAttribute('marksnip-latex')
     const display = mathJax3Node.getAttribute('display')
     const inline = !(display && display === 'true')
 

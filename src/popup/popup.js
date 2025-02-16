@@ -165,7 +165,7 @@ browser.storage.sync.get(defaultOptions).then(options => {
             file: "/contentScript/contentScript.js"
         });
     }).then( () => {
-        console.info("Successfully injected MarkDownload content script");
+        console.info("Successfully injected MarkSnip content script");
         return clipSite(id);
     }).catch( (error) => {
         console.error(error);

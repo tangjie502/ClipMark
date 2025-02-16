@@ -5,7 +5,7 @@ function addLatexToMathJax3()
 
     for (math of MathJax.startup.document.math)
     {
-        math.typesetRoot.setAttribute("markdownload-latex", math.math)
+        math.typesetRoot.setAttribute("marksnip-latex", math.math)
     }
 }
 addLatexToMathJax3()

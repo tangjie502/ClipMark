@@ -270,7 +270,7 @@ const buttonClick = (e) => {
         browser.downloads.download({
             url: url,
             saveAs: true,
-            filename: `MarkDownload-export-${datestring}.json`
+            filename: `MarkSnip-export-${datestring}.json`
         });
     }
 }
