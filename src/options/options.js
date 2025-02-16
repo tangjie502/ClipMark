@@ -21,6 +21,14 @@ const saveOptions = e => {
         obsidianVault: document.querySelector("[name='obsidianVault']").value,
         obsidianFolder: document.querySelector("[name='obsidianFolder']").value,
 
+        // Add table formatting options
+        tableFormatting: {
+            stripLinks: document.querySelector("[name='tableFormatting.stripLinks']").checked,
+            stripFormatting: document.querySelector("[name='tableFormatting.stripFormatting']").checked,
+            prettyPrint: document.querySelector("[name='tableFormatting.prettyPrint']").checked,
+            centerText: document.querySelector("[name='tableFormatting.centerText']").checked
+        },
+
         headingStyle: getCheckedValue(document.querySelectorAll("input[name='headingStyle']")),
         hr: getCheckedValue(document.querySelectorAll("input[name='hr']")),
         bulletListMarker: getCheckedValue(document.querySelectorAll("input[name='bulletListMarker']")),
@@ -33,7 +41,6 @@ const saveOptions = e => {
         imageStyle: getCheckedValue(document.querySelectorAll("input[name='imageStyle']")),
         imageRefStyle: getCheckedValue(document.querySelectorAll("input[name='imageRefStyle']")),
         downloadMode: getCheckedValue(document.querySelectorAll("input[name='downloadMode']")),
-        // obsidianPathType: getCheckedValue(document.querySelectorAll("input[name='obsidianPathType']")),
     }
 
     save();
@@ -99,7 +106,7 @@ const setCurrentChoice = result => {
     if (!browser.downloads) {
         options.downloadMode = 'contentLink';
         document.querySelectorAll("[name='downloadMode']").forEach(el => el.disabled = true)
-        document.querySelector('#downloadMode p').innerText = "The Downloas API is unavailable in this browser."
+        document.querySelector('#downloadMode p').innerText = "The Downloads API is unavailable in this browser."
     }
 
     const downloadImages = options.downloadImages && options.downloadMode == 'downloadsApi';
@@ -107,6 +114,15 @@ const setCurrentChoice = result => {
     if (!downloadImages && (options.imageStyle == 'markdown' || options.imageStyle.startsWith('obsidian'))) {
         options.imageStyle = 'originalSource';
     }
+
+    // Initialize tableFormatting with default values if it doesn't exist
+    options.tableFormatting = {
+        stripLinks: false, // Default to false
+        stripFormatting: false,
+        prettyPrint: true,
+        centerText: true,
+        ...options.tableFormatting  // Merge with any existing settings
+    };
 
     document.querySelector("[name='frontmatter']").value = options.frontmatter;
     textareaInput.bind(document.querySelector("[name='frontmatter']"))();
@@ -125,6 +141,12 @@ const setCurrentChoice = result => {
     document.querySelector("[name='obsidianVault']").value = options.obsidianVault;
     document.querySelector("[name='obsidianFolder']").value = options.obsidianFolder;
 
+    // Set table formatting checkboxes explicitly with Boolean conversion
+    document.querySelector("[name='tableFormatting.stripLinks']").checked = Boolean(options.tableFormatting.stripLinks);
+    document.querySelector("[name='tableFormatting.stripFormatting']").checked = Boolean(options.tableFormatting.stripFormatting);
+    document.querySelector("[name='tableFormatting.prettyPrint']").checked = Boolean(options.tableFormatting.prettyPrint);
+    document.querySelector("[name='tableFormatting.centerText']").checked = Boolean(options.tableFormatting.centerText);
+
     setCheckedValue(document.querySelectorAll("[name='headingStyle']"), options.headingStyle);
     setCheckedValue(document.querySelectorAll("[name='hr']"), options.hr);
     setCheckedValue(document.querySelectorAll("[name='bulletListMarker']"), options.bulletListMarker);
@@ -137,7 +159,6 @@ const setCurrentChoice = result => {
     setCheckedValue(document.querySelectorAll("[name='imageStyle']"), options.imageStyle);
     setCheckedValue(document.querySelectorAll("[name='imageRefStyle']"), options.imageRefStyle);
     setCheckedValue(document.querySelectorAll("[name='downloadMode']"), options.downloadMode);
-    // setCheckedValue(document.querySelectorAll("[name='obsidianPathType']"), options.obsidianPathType);
 
     refereshElements();
 }
@@ -190,8 +211,6 @@ const refereshElements = () => {
 }
 
 const inputChange = e => {
-    console.log('inputChange');
-
     if (e) {
         let key = e.target.name;
         let value = e.target.value;
@@ -210,8 +229,16 @@ const inputChange = e => {
         }
         else {
             if (e.target.type == "checkbox") value = e.target.checked;
-            options[key] = value;
-
+            
+            // Handle nested table formatting options
+            if (key.startsWith('tableFormatting.')) {
+                const optionName = key.split('.')[1];
+                options.tableFormatting = options.tableFormatting || {};
+                options.tableFormatting[optionName] = value;
+            } else {
+                options[key] = value;
+            }
+ 
             if (key == "contextMenus") {
                 if (value) { createMenus() }
                 else { browser.contextMenus.removeAll() }
@@ -221,7 +248,7 @@ const inputChange = e => {
             refereshElements();
         }
     }
-}
+ }
 
 const inputKeyup = (e) => {
     if (keyupTimeout) clearTimeout(keyupTimeout);

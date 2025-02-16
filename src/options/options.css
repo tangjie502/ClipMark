@@ -357,3 +357,94 @@ input[type="text"], textarea {
 summary > * {
     display: inline-block;
 }
+
+#table-options {
+    margin-top: 1em;
+}
+
+#table-options label {
+    display: block;
+    margin-bottom: 1.5em;
+    padding: 1em;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    cursor: pointer;
+    transition: .3s ease all;
+}
+
+#table-options label:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+#table-options label input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+#table-options label p {
+    margin: 0.5em 0 0 1.5em;
+    font-size: 0.9em;
+    color: var(--fg);
+    opacity: 0.8;
+}
+
+/* Example table preview */
+.table-preview {
+    margin: 1em 0;
+    padding: 1em;
+    background: var(--pre-bg);
+    border-radius: 5px;
+    overflow-x: auto;
+}
+
+.table-preview table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.table-preview th,
+.table-preview td {
+    border: 1px solid var(--border);
+    padding: 0.5em;
+    text-align: left;
+}
+
+/* Dark mode compatibility */
+@media(prefers-color-scheme: dark) {
+    #table-options label {
+        background: var(--bg);
+    }
+    
+    #table-options label:hover {
+        background: var(--bg-primary);
+    }
+
+    .table-preview {
+        background: var(--pre-bg);
+    }
+}
+
+#table-options {
+    display: block;  /* Override the flex display from checkbox-container */
+    margin-top: 1em;
+}
+
+#table-options > label {
+    display: block;
+    margin-bottom: 1.5em;
+    padding: 20px 20px 20px 65px; /* Match the padding of other checkbox labels */
+    width: auto;  /* Reset the width constraint */
+    max-width: none;  /* Allow the label to take full width */
+}
+
+#table-options input[type="checkbox"] {
+    position: absolute;
+    visibility: hidden;
+}
+
+/* Ensure the circle appears correctly */
+#table-options > label::before {
+    left: 20px;
+    top: 20px;
+}

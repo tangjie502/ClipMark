@@ -13,13 +13,144 @@ TurndownService.prototype.defaultEscape = TurndownService.prototype.escape;
 
 // function to convert the article content to markdown using Turndown
 function turndown(content, options, article) {
+  console.log("Starting turndown with options:", options.tableFormatting); // Debug log
 
   if (options.turndownEscape) TurndownService.prototype.escape = TurndownService.prototype.defaultEscape;
   else TurndownService.prototype.escape = s => s;
 
   var turndownService = new TurndownService(options);
 
-  turndownService.use(turndownPluginGfm.gfm)
+  // Add only non-table GFM features
+  turndownService.use([
+    turndownPluginGfm.highlightedCodeBlock,
+    turndownPluginGfm.strikethrough,
+    turndownPluginGfm.taskListItems
+  ]);
+
+  // Add our custom table rule
+  turndownService.addRule('table', {
+    filter: 'table',
+    replacement: function(content, node) {
+      try {
+        const thead = node.querySelector('thead');
+        const tbody = node.querySelector('tbody');
+        const headerRow = thead?.querySelector('tr');
+        const rows = headerRow ? 
+          [headerRow, ...tbody.children] :
+          [...tbody.children];
+      
+        let tableMatrix = Array.from({ length: rows.length }, () => []);
+        let columnWidths = [];
+      
+        // Process each row
+        rows.forEach((row, rowIndex) => {
+          [...row.children].forEach(cell => {
+            // Get cell's HTML content
+            const cellHtml = cell.innerHTML;
+            
+            // Create temporary element for manipulation
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = cellHtml;
+            
+            let cellContent = '';
+            
+            // Only strip links if the option is enabled AND we're in a table
+            if (options.tableFormatting?.stripLinks) {
+              // Strip links
+              const links = tempDiv.getElementsByTagName('a');
+              while (links.length) {
+                const link = links[0];
+                link.replaceWith(document.createTextNode(link.textContent.trim()));
+              }
+              cellContent = tempDiv.textContent.trim();
+            } else {
+              // If not stripping links, preserve HTML structure including links
+              cellContent = tempDiv.innerHTML.trim();
+            }
+      
+            if (options.tableFormatting?.stripFormatting) {
+              const formattingDiv = document.createElement('div');
+              formattingDiv.innerHTML = cellContent;
+              ['b', 'strong', 'i', 'em'].forEach(tag => {
+                const elements = formattingDiv.getElementsByTagName(tag);
+                while (elements.length) {
+                  const el = elements[0];
+                  el.replaceWith(document.createTextNode(el.textContent.trim()));
+                }
+              });
+              cellContent = formattingDiv.textContent.trim();
+            }
+            
+            cellContent = cellContent.replace(/\n/g, ' ');
+      
+            // Rest of the existing table cell processing code...
+            const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+            const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+      
+            for (let i = 0; i < rowspan; i++) {
+              for (let j = 0; j < colspan; j++) {
+                const targetRow = rowIndex + i;
+                const targetCol = tableMatrix[targetRow].length;
+                tableMatrix[targetRow][targetCol] = cellContent;
+                
+                // Calculate visible length (excluding HTML tags)
+                const tempMeasure = document.createElement('div');
+                tempMeasure.innerHTML = cellContent;
+                const visibleLength = tempMeasure.textContent.length;
+                
+                if (!columnWidths[targetCol] || visibleLength > columnWidths[targetCol]) {
+                  columnWidths[targetCol] = visibleLength;
+                }
+              }
+            }
+          });
+        });
+
+        let markdown = '\n\n';
+        
+        const formatCell = (content, columnIndex) => {
+          if (!options.tableFormatting?.prettyPrint) {
+            return ` ${content} `;
+          }
+          
+          // Calculate visible length for centering
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = content;
+          const visibleLength = tempDiv.textContent.length;
+          
+          const width = columnWidths[columnIndex];
+          const totalWidth = width + 2;
+          
+          if (!options.tableFormatting?.centerText) {
+            return ` ${content}${' '.repeat(totalWidth - visibleLength - 1)}`;
+          }
+          
+          const leftSpace = ' '.repeat(Math.floor((totalWidth - visibleLength) / 2));
+          const rightSpace = ' '.repeat(Math.ceil((totalWidth - visibleLength) / 2));
+          return leftSpace + content + rightSpace;
+        };
+
+        // Build header row
+        const headerContent = tableMatrix[0].map((cell, i) => formatCell(cell, i)).join('|');
+        markdown += '|' + headerContent + '|\n';
+
+        // Build separator
+        const separator = columnWidths.map(width => '-'.repeat(width + 2)).join('|');
+        markdown += '|' + separator + '|\n';
+
+        // Build data rows
+        for (let i = 1; i < tableMatrix.length; i++) {
+          const row = tableMatrix[i].map((cell, j) => formatCell(cell, j)).join('|');
+          markdown += '|' + row + '|\n';
+        }
+
+        return markdown;
+      } catch (error) {
+        console.error('Error in table conversion:', error);
+        return content;
+      }
+    }
+  });
 
   turndownService.keep(['iframe', 'sub', 'sup', 'u', 'ins', 'del', 'small', 'big']);
 
@@ -101,23 +232,37 @@ function turndown(content, options, article) {
 
   });
 
+  // Utility function to check if an element is inside a table
+  function isInsideTable(node) {
+    let parent = node.parentNode;
+    while (parent) {
+      if (parent.nodeName === 'TABLE') {
+        return true;
+      }
+      parent = parent.parentNode;
+    }
+    return false;
+  }
+
   // add a rule for links
   turndownService.addRule('links', {
     filter: (node, tdopts) => {
-      // check that this is indeed a link
-      if (node.nodeName == 'A' && node.getAttribute('href')) {
-        // get the href
-        const href = node.getAttribute('href');
-        // set the new href
-        node.setAttribute('href', validateUri(href, article.baseURI));
-        // if we are to strip links, the filter needs to pass
-        return options.linkStyle == 'stripLinks';
-      }
-      // we're not passing the filter, just do the normal thing.
-      return false;
+      return node.nodeName == 'A' && node.getAttribute('href')
     },
-    // if the filter passes, we're stripping links, so just return the content
-    replacement: (content, node, tdopts) => content
+    replacement: (content, node, tdopts) => {
+      // get the href
+      const href = validateUri(node.getAttribute('href'), article.baseURI);
+      
+      // If we're in a table AND strip links is enabled, just return the text content
+      if (isInsideTable(node) && options.tableFormatting?.stripLinks === true) {
+        return content
+      }
+      
+      // Otherwise, convert to proper markdown link format
+      const title = cleanAttribute(node.getAttribute('title'));
+      const titlePart = title ? ` "${title}"` : '';
+      return `[${content}](${href}${titlePart})`
+    }
   });
 
   // handle multiple lines math
@@ -147,20 +292,30 @@ function turndown(content, options, article) {
     const langMatch = node.id?.match(/code-lang-(.+)/);
     const language = langMatch?.length > 0 ? langMatch[1] : '';
 
-    const code = node.innerText;
+    var code;
 
-    const fenceChar = options.fence.charAt(0);
-    let fenceSize = 3;
-    const fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+    if (language) {
+      var div = document.createElement('div');
+      document.body.appendChild(div);
+      div.appendChild(node);
+      code = node.innerText;
+      div.remove();
+    } else {
+      code = node.innerHTML;
+    }
 
-    let match;
+    var fenceChar = options.fence.charAt(0);
+    var fenceSize = 3;
+    var fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+
+    var match;
     while ((match = fenceInCodeRegex.exec(code))) {
       if (match[0].length >= fenceSize) {
         fenceSize = match[0].length + 1;
       }
     }
 
-    const fence = repeat(fenceChar, fenceSize);
+    var fence = repeat(fenceChar, fenceSize);
 
     return (
       '\n\n' + fence + language + '\n' +
@@ -185,11 +340,7 @@ function turndown(content, options, article) {
 
   // handle <pre> as code blocks
   turndownService.addRule('pre', {
-    filter: (node, tdopts) => {
-      return node.nodeName == 'PRE'
-             && (!node.firstChild || node.firstChild.nodeName != 'CODE')
-             && !node.querySelector('img');
-    },
+    filter: (node, tdopts) => node.nodeName == 'PRE' && (!node.firstChild || node.firstChild.nodeName != 'CODE'),
     replacement: (content, node, tdopts) => {
       return convertToFencedCodeBlock(node, tdopts);
     }
@@ -200,7 +351,7 @@ function turndown(content, options, article) {
 
   // strip out non-printing special characters which CodeMirror displays as a red dot
   // see: https://codemirror.net/doc/manual.html#option_specialChars
-  markdown = markdown.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028\u2029\ufeff\ufff9-\ufffc]/g, '');
+  markdown = markdown.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028\u2029\ufeff\ufff9-\ufffc]/g, '');
   
   return { markdown: markdown, imageList: imageList };
 }
@@ -269,14 +420,8 @@ function textReplace(string, article, disallowedChars = null) {
       if (s && disallowedChars) s = this.generateValidFileName(s, disallowedChars);
 
       string = string.replace(new RegExp('{' + key + '}', 'g'), s)
-        .replace(new RegExp('{' + key + ':lower}', 'g'), s.toLowerCase())
-        .replace(new RegExp('{' + key + ':upper}', 'g'), s.toUpperCase())
         .replace(new RegExp('{' + key + ':kebab}', 'g'), s.replace(/ /g, '-').toLowerCase())
-        .replace(new RegExp('{' + key + ':mixed-kebab}', 'g'), s.replace(/ /g, '-'))
         .replace(new RegExp('{' + key + ':snake}', 'g'), s.replace(/ /g, '_').toLowerCase())
-        .replace(new RegExp('{' + key + ':mixed_snake}', 'g'), s.replace(/ /g, '_'))
-        // For Obsidian Custom Attachment Location plugin, we need to replace spaces with hyphens, but also remove any double hyphens.
-        .replace(new RegExp('{' + key + ':obsidian-cal}', 'g'), s.replace(/ /g, '-').replace(/-{2,}/g, "-"))
         .replace(new RegExp('{' + key + ':camel}', 'g'), s.replace(/ ./g, (str) => str.trim().toUpperCase()).replace(/^./, (str) => str.toLowerCase()))
         .replace(new RegExp('{' + key + ':pascal}', 'g'), s.replace(/ ./g, (str) => str.trim().toUpperCase()).replace(/^./, (str) => str.toUpperCase()))
     }
@@ -350,12 +495,8 @@ function generateValidFileName(title, disallowedChars = null) {
   // remove < > : " / \ | ? * 
   var illegalRe = /[\/\?<>\\:\*\|":]/g;
   // and non-breaking spaces (thanks @Licat)
-  var name = title.replace(illegalRe, "").replace(new RegExp('\u00A0', 'g'), ' ')
-      // collapse extra whitespace
-      .replace(new RegExp(/\s+/, 'g'), ' ')
-      // remove leading/trailing whitespace that can cause issues when using {pageTitle} in a download path
-      .trim();
-
+  var name = title.replace(illegalRe, "").replace(new RegExp('\u00A0', 'g'), ' ');
+  
   if (disallowedChars) {
     for (let c of disallowedChars) {
       if (`[\\^$.|?*+()`.includes(c)) c = `\\${c}`;
@@ -457,7 +598,7 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
       // download images (if enabled)
       if (options.downloadImages) {
         // get the relative path of the markdown file (if any) for image path
-        let destPath = mdClipsFolder + title.substring(0, title.lastIndexOf('/'));
+        const destPath = mdClipsFolder + title.substring(0, title.lastIndexOf('/'));
         if(destPath && !destPath.endsWith('/')) destPath += '/';
         Object.entries(imageList).forEach(async ([src, filename]) => {
           // start the download of the image
@@ -750,12 +891,6 @@ async function getArticleFromDom(domString) {
     header.outerHTML = header.outerHTML;  
   });
 
-  // Prevent Readability from removing the <html> element if has a 'class' attribute
-  // which matches removal criteria.
-  // Note: The document element is guaranteed to be the HTML tag because the 'text/html'
-  // mime type was used when the DOM was created.
-  dom.documentElement.removeAttribute('class')
-
   // simplify the dom into an article
   const article = new Readability(dom).parse();
 
@@ -965,7 +1100,7 @@ async function copyMarkdownFromContext(info, tab) {
     }
     else if(info.menuItemId == "copy-markdown-obsidian") {
       const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-obsidian");
-      const title = await formatTitle(article);
+      const title = article.title;
       const options = await getOptions();
       const obsidianVault = options.obsidianVault;
       const obsidianFolder = await formatObsidianFolder(article);
@@ -975,7 +1110,7 @@ async function copyMarkdownFromContext(info, tab) {
     }
     else if(info.menuItemId == "copy-markdown-obsall") {
       const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-obsall");
-      const title = await formatTitle(article);
+      const title = article.title;
       const options = await getOptions();
       const obsidianVault = options.obsidianVault;
       const obsidianFolder = await formatObsidianFolder(article);
