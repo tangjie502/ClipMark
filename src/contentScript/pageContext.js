@@ -1,11 +1,20 @@
-function addLatexToMathJax3()
-{
-    if (!MathJax?.startup?.document?.math)
-        return
+function addLatexToMathJax3() {
+    // First check if MathJax exists in the global scope
+    if (typeof MathJax === 'undefined') {
+        return; // Exit early if MathJax is not available on the page
+    }
 
-    for (math of MathJax.startup.document.math)
-    {
-        math.typesetRoot.setAttribute("marksnip-latex", math.math)
+    // Then check for the specific properties
+    if (!MathJax?.startup?.document?.math) {
+        return;
+    }
+
+    for (const math of MathJax.startup.document.math) {
+        math.typesetRoot.setAttribute("marksnip-latex", math.math);
     }
 }
-addLatexToMathJax3()
+
+// Only call the function if we're in a page context
+if (typeof window !== 'undefined') {
+    addLatexToMathJax3();
+}

@@ -96,43 +96,50 @@ const showOrHideClipOption = selection => {
     }
 }
 
+// Updated clipSite function to use scripting API
 const clipSite = id => {
-    return browser.tabs.executeScript(id, { code: "getSelectionAndDom()" })
-        .then((result) => {
-            if (result && result[0]) {
-                showOrHideClipOption(result[0].selection);
-                let message = {
-                    type: "clip",
-                    dom: result[0].dom,
-                    selection: result[0].selection
-                }
-                return browser.storage.sync.get(defaultOptions).then(options => {
-                    browser.runtime.sendMessage({
-                        ...message,
-                        ...options
-                    });
-                }).catch(err => {
-                    console.error(err);
-                    showError(err)
-                    return browser.runtime.sendMessage({
-                        ...message,
-                        ...defaultOptions
-                    });
-                }).catch(err => {
-                    console.error(err);
-                    showError(err)
-                });
+    return browser.scripting.executeScript({
+        target: { tabId: id },
+        func: () => {
+            if (typeof getSelectionAndDom === 'function') {
+                return getSelectionAndDom();
             }
-        }).catch(err => {
-            console.error(err);
-            showError(err)
-        });
+            return null;
+        }
+    })
+    .then((result) => {
+        if (result && result[0]?.result) {
+            showOrHideClipOption(result[0].result.selection);
+            let message = {
+                type: "clip",
+                dom: result[0].result.dom,
+                selection: result[0].result.selection
+            }
+            return browser.storage.sync.get(defaultOptions).then(options => {
+                browser.runtime.sendMessage({
+                    ...message,
+                    ...options
+                });
+            }).catch(err => {
+                console.error(err);
+                showError(err)
+                return browser.runtime.sendMessage({
+                    ...message,
+                    ...defaultOptions
+                });
+            });
+        }
+    }).catch(err => {
+        console.error(err);
+        showError(err)
+    });
 }
 
-// inject the necessary scripts
+// Inject the necessary scripts - updated for Manifest V3
 browser.storage.sync.get(defaultOptions).then(options => {
     checkInitialSettings(options);
     
+    // Set up event listeners (unchanged)
     document.getElementById("selected").addEventListener("click", (e) => {
         e.preventDefault();
         toggleClipSelection(options);
@@ -157,17 +164,21 @@ browser.storage.sync.get(defaultOptions).then(options => {
 }).then((tabs) => {
     var id = tabs[0].id;
     var url = tabs[0].url;
-    browser.tabs.executeScript(id, {
-        file: "/browser-polyfill.min.js"
+    
+    // Use scripting API instead of executeScript
+    browser.scripting.executeScript({
+        target: { tabId: id },
+        files: ["/browser-polyfill.min.js"]
     })
     .then(() => {
-        return browser.tabs.executeScript(id, {
-            file: "/contentScript/contentScript.js"
+        return browser.scripting.executeScript({
+            target: { tabId: id },
+            files: ["/contentScript/contentScript.js"]
         });
-    }).then( () => {
+    }).then(() => {
         console.info("Successfully injected MarkSnip content script");
         return clipSite(id);
-    }).catch( (error) => {
+    }).catch((error) => {
         console.error(error);
         showError(error);
     });
@@ -197,18 +208,26 @@ function sendDownloadMessage(text) {
     }
 }
 
-// event handler for download button
+// Download event handler - updated to use promises
 async function download(e) {
     e.preventDefault();
-    await sendDownloadMessage(cm.getValue());
-    window.close();
+    try {
+        await sendDownloadMessage(cm.getValue());
+        window.close();
+    } catch (error) {
+        console.error("Error sending download message:", error);
+    }
 }
 
-// event handler for download selected button
+// Download selection handler - updated to use promises
 async function downloadSelection(e) {
     e.preventDefault();
     if (cm.somethingSelected()) {
-        await sendDownloadMessage(cm.getSelection());
+        try {
+            await sendDownloadMessage(cm.getSelection());
+        } catch (error) {
+            console.error("Error sending selection download message:", error);
+        }
     }
 }
 

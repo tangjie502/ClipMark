@@ -1,0 +1,1229 @@
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', initOffscreen);
+
+// Listen for messages
+browser.runtime.onMessage.addListener(handleMessages);
+
+// Notify service worker that offscreen document is ready
+browser.runtime.sendMessage({ type: 'offscreen-ready' });
+
+/**
+ * Initialize offscreen document
+ */
+function initOffscreen() {
+  console.log('MarkSnip offscreen document initialized');
+  TurndownService.prototype.defaultEscape = TurndownService.prototype.escape;
+}
+
+/**
+ * Handle messages from service worker
+ */
+async function handleMessages(message, sender) {
+  if (!message.target || message.target !== 'offscreen') {
+    return; // Not for this context
+  }
+
+  switch (message.type) {
+    case 'process-content':
+      await processContent(message);
+      break;
+    case 'download-markdown':
+      await downloadMarkdown(
+        message.markdown,
+        message.title,
+        message.tabId,
+        message.imageList,
+        message.mdClipsFolder
+      );
+      break;
+    case 'process-context-menu':
+      await processContextMenu(message);
+      break;
+  }
+}
+
+/**
+ * Process HTML content to markdown
+ */
+async function processContent(message) {
+  try {
+    const { data, requestId, tabId } = message;
+    
+    // Get article from DOM
+    const article = await getArticleFromDom(data.dom);
+    
+    // Handle selection if provided
+    if (data.selection && data.clipSelection) {
+      article.content = data.selection;
+    }
+    
+    // Convert to markdown
+    const { markdown, imageList } = await convertArticleToMarkdown(article);
+    
+    // Format title and folder
+    article.title = await formatTitle(article);
+    const mdClipsFolder = await formatMdClipsFolder(article);
+    
+    // Send results back to service worker
+    await browser.runtime.sendMessage({
+      type: 'markdown-result',
+      requestId: requestId,
+      result: {
+        markdown,
+        article,
+        imageList,
+        mdClipsFolder
+      }
+    });
+  } catch (error) {
+    console.error('Error processing content:', error);
+    // Notify service worker of error
+    await browser.runtime.sendMessage({
+      type: 'process-error',
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Process context menu actions
+ */
+async function processContextMenu(message) {
+  const { action, info, tabId } = message;
+  
+  try {
+    if (action === 'download') {
+      await handleContextMenuDownload(info, tabId);
+    } else if (action === 'copy') {
+      await handleContextMenuCopy(info, tabId);
+    }
+  } catch (error) {
+    console.error(`Error processing context menu ${action}:`, error);
+  }
+}
+
+/**
+ * Handle context menu download action
+ */
+async function handleContextMenuDownload(info, tabId) {
+  const article = await getArticleFromContent(tabId, info.menuItemId === "download-markdown-selection");
+  const title = await formatTitle(article);
+  const { markdown, imageList } = await convertArticleToMarkdown(article);
+  const mdClipsFolder = await formatMdClipsFolder(article);
+  await downloadMarkdown(markdown, title, tabId, imageList, mdClipsFolder);
+}
+
+/**
+ * Handle context menu copy action
+ */
+async function handleContextMenuCopy(info, tabId) {
+  const platformOS = navigator.platform;
+  const folderSeparator = platformOS.indexOf("Win") === 0 ? "\\" : "/";
+
+  if (info.menuItemId === "copy-markdown-link") {
+    const options = await getOptions();
+    options.frontmatter = options.backmatter = '';
+    const article = await getArticleFromContent(tabId, false);
+    const { markdown } = turndown(
+      `<a href="${info.linkUrl}">${info.linkText || info.selectionText}</a>`,
+      { ...options, downloadImages: false },
+      article
+    );
+    await copyToClipboard(markdown);
+    await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
+  }
+  else if (info.menuItemId === "copy-markdown-image") {
+    await executeScriptInTab(tabId, `copyToClipboard("![](${info.srcUrl})")`);
+  }
+  else if (info.menuItemId === "copy-markdown-obsidian") {
+    const article = await getArticleFromContent(tabId, true);
+    const title = article.title;
+    const options = await getOptions();
+    const obsidianVault = options.obsidianVault;
+    const obsidianFolder = await formatObsidianFolder(article);
+    const { markdown } = await convertArticleToMarkdown(article, false);
+    await copyToClipboard(markdown);
+    await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
+    await browser.tabs.update({
+      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title)}`
+    });
+  }
+  else if (info.menuItemId === "copy-markdown-obsall") {
+    const article = await getArticleFromContent(tabId, false);
+    const title = article.title;
+    const options = await getOptions();
+    const obsidianVault = options.obsidianVault;
+    const obsidianFolder = await formatObsidianFolder(article);
+    const { markdown } = await convertArticleToMarkdown(article, false);
+    await copyToClipboard(markdown);
+    await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
+    await browser.tabs.update({
+      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title)}`
+    });
+  }
+  else {
+    const article = await getArticleFromContent(tabId, info.menuItemId === "copy-markdown-selection");
+    const { markdown } = await convertArticleToMarkdown(article, false);
+    await copyToClipboard(markdown);
+    await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
+  }
+}
+
+/**
+ * Execute script in tab
+ */
+async function executeScriptInTab(tabId, codeString) {
+  return browser.scripting.executeScript({
+    target: { tabId: tabId },
+    func: (code) => {
+      return eval(code);
+    },
+    args: [codeString]
+  });
+}
+
+/**
+ * Copy text to clipboard
+ */
+async function copyToClipboard(text) {
+  const textArea = document.getElementById('clipboard-text');
+  textArea.value = text;
+  textArea.select();
+  document.execCommand('copy');
+}
+
+/**
+ * Convert article to markdown
+ * This uses the original turndown function from background.js
+ */
+async function convertArticleToMarkdown(article, downloadImages = null) {
+  const options = await getOptions();
+  if (downloadImages != null) {
+    options.downloadImages = downloadImages;
+  }
+
+  // Substitute front and backmatter templates if necessary
+  if (options.includeTemplate) {
+    options.frontmatter = textReplace(options.frontmatter, article) + '\n';
+    options.backmatter = '\n' + textReplace(options.backmatter, article);
+  }
+  else {
+    options.frontmatter = options.backmatter = '';
+  }
+
+  options.imagePrefix = textReplace(options.imagePrefix, article, options.disallowedChars)
+    .split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+
+  let result = turndown(article.content, options, article);
+  if (options.downloadImages && options.downloadMode === 'downloadsApi') {
+    // Pre-download the images
+    result = await preDownloadImages(result.imageList, result.markdown);
+  }
+  return result;
+}
+
+/**
+ * Turndown HTML to Markdown conversion
+ */
+function turndown(content, options, article) {
+  console.log("Starting turndown with options:", options.tableFormatting); // Debug log
+
+  if (options.turndownEscape) TurndownService.prototype.escape = TurndownService.prototype.defaultEscape;
+  else TurndownService.prototype.escape = s => s;
+
+  var turndownService = new TurndownService(options);
+
+  // Add only non-table GFM features
+  turndownService.use([
+    turndownPluginGfm.highlightedCodeBlock,
+    turndownPluginGfm.strikethrough,
+    turndownPluginGfm.taskListItems
+  ]);
+
+  // Add our custom table rule
+  turndownService.addRule('table', {
+    filter: 'table',
+    replacement: function(content, node) {
+      try {
+        const thead = node.querySelector('thead');
+        const tbody = node.querySelector('tbody');
+        const headerRow = thead?.querySelector('tr');
+        const rows = headerRow ? 
+          [headerRow, ...tbody.children] :
+          [...tbody.children];
+      
+        let tableMatrix = Array.from({ length: rows.length }, () => []);
+        let columnWidths = [];
+      
+        // Process each row
+        rows.forEach((row, rowIndex) => {
+          [...row.children].forEach(cell => {
+            // Get cell's HTML content
+            const cellHtml = cell.innerHTML;
+            
+            // Create temporary element for manipulation
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = cellHtml;
+            
+            let cellContent = '';
+            
+            // Only strip links if the option is enabled AND we're in a table
+            if (options.tableFormatting?.stripLinks) {
+              // Strip links
+              const links = tempDiv.getElementsByTagName('a');
+              while (links.length) {
+                const link = links[0];
+                link.replaceWith(document.createTextNode(link.textContent.trim()));
+              }
+              cellContent = tempDiv.textContent.trim();
+            } else {
+              // If not stripping links, preserve HTML structure including links
+              cellContent = tempDiv.innerHTML.trim();
+            }
+      
+            if (options.tableFormatting?.stripFormatting) {
+              const formattingDiv = document.createElement('div');
+              formattingDiv.innerHTML = cellContent;
+              ['b', 'strong', 'i', 'em'].forEach(tag => {
+                const elements = formattingDiv.getElementsByTagName(tag);
+                while (elements.length) {
+                  const el = elements[0];
+                  el.replaceWith(document.createTextNode(el.textContent.trim()));
+                }
+              });
+              cellContent = formattingDiv.textContent.trim();
+            }
+            
+            cellContent = cellContent.replace(/\n/g, ' ');
+      
+            // Rest of the existing table cell processing code...
+            const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+            const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+      
+            for (let i = 0; i < rowspan; i++) {
+              for (let j = 0; j < colspan; j++) {
+                const targetRow = rowIndex + i;
+                const targetCol = tableMatrix[targetRow].length;
+                tableMatrix[targetRow][targetCol] = cellContent;
+                
+                // Calculate visible length (excluding HTML tags)
+                const tempMeasure = document.createElement('div');
+                tempMeasure.innerHTML = cellContent;
+                const visibleLength = tempMeasure.textContent.length;
+                
+                if (!columnWidths[targetCol] || visibleLength > columnWidths[targetCol]) {
+                  columnWidths[targetCol] = visibleLength;
+                }
+              }
+            }
+          });
+        });
+
+        let markdown = '\n\n';
+        
+        const formatCell = (content, columnIndex) => {
+          // Ensure content is a string
+          const safeContent = content || '';
+          
+          if (!options.tableFormatting?.prettyPrint) {
+            return ` ${safeContent} `;
+          }
+          
+          // Ensure columnIndex is valid
+          if (columnIndex === undefined || !Array.isArray(columnWidths) || columnIndex >= columnWidths.length) {
+            return ` ${safeContent} `;
+          }
+          
+          // Calculate visible length for centering
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = safeContent;
+          const visibleLength = tempDiv.textContent.length;
+          
+          const width = columnWidths[columnIndex] || 0;
+          const totalWidth = width + 2;
+          
+          if (!options.tableFormatting?.centerText) {
+            return ` ${safeContent}${' '.repeat(Math.max(0, totalWidth - visibleLength - 1))}`;
+          }
+          
+          const leftSpace = ' '.repeat(Math.floor(Math.max(0, totalWidth - visibleLength) / 2));
+          const rightSpace = ' '.repeat(Math.ceil(Math.max(0, totalWidth - visibleLength) / 2));
+          return leftSpace + safeContent + rightSpace;
+        };
+
+        // Build header row
+        if (tableMatrix.length > 0 && tableMatrix[0] && Array.isArray(tableMatrix[0])) {
+          const headerContent = tableMatrix[0].map((cell, i) => formatCell(cell, i)).join('|');
+          markdown += '|' + headerContent + '|\n';
+
+          // Build separator
+          const separator = columnWidths.map(width => '-'.repeat(width + 2)).join('|');
+          markdown += '|' + separator + '|\n';
+
+          // Build data rows
+          for (let i = 1; i < tableMatrix.length; i++) {
+            if (tableMatrix[i] && Array.isArray(tableMatrix[i])) {
+              const row = tableMatrix[i].map((cell, j) => formatCell(cell, j)).join('|');
+              markdown += '|' + row + '|\n';
+            }
+          }
+        } else {
+          // Fallback for tables with no rows or invalid structure
+          markdown += '| No data available |\n|-|\n';
+        }
+
+        return markdown;
+      } catch (error) {
+        console.error('Error in table conversion:', error);
+        return content;
+      }
+    }
+  });
+
+  turndownService.keep(['iframe', 'sub', 'sup', 'u', 'ins', 'del', 'small', 'big']);
+
+  let imageList = {};
+  // add an image rule
+  turndownService.addRule('images', {
+    filter: function (node, tdopts) {
+      // if we're looking at an img node with a src
+      if (node.nodeName == 'IMG' && node.getAttribute('src')) {
+        
+        // get the original src
+        let src = node.getAttribute('src')
+        // set the new src
+        node.setAttribute('src', validateUri(src, article.baseURI));
+        
+        // if we're downloading images, there's more to do.
+        if (options.downloadImages) {
+          // generate a file name for the image
+          let imageFilename = getImageFilename(src, options, false);
+          if (!imageList[src] || imageList[src] != imageFilename) {
+            // if the imageList already contains this file, add a number to differentiate
+            let i = 1;
+            while (Object.values(imageList).includes(imageFilename)) {
+              const parts = imageFilename.split('.');
+              if (i == 1) parts.splice(parts.length - 1, 0, i++);
+              else parts.splice(parts.length - 2, 1, i++);
+              imageFilename = parts.join('.');
+            }
+            // add it to the list of images to download later
+            imageList[src] = imageFilename;
+          }
+          // check if we're doing an obsidian style link
+          const obsidianLink = options.imageStyle.startsWith("obsidian");
+          // figure out the (local) src of the image
+          const localSrc = options.imageStyle === 'obsidian-nofolder'
+            // if using "nofolder" then we just need the filename, no folder
+            ? imageFilename.substring(imageFilename.lastIndexOf('/') + 1)
+            // otherwise we may need to modify the filename to uri encode parts for a pure markdown link
+            : imageFilename.split('/').map(s => obsidianLink ? s : encodeURI(s)).join('/')
+          
+          // set the new src attribute to be the local filename
+          if(options.imageStyle != 'originalSource' && options.imageStyle != 'base64') node.setAttribute('src', localSrc);
+          // pass the filter if we're making an obsidian link (or stripping links)
+          return true;
+        }
+        else return true
+      }
+      // don't pass the filter, just output a normal markdown link
+      return false;
+    },
+    replacement: function (content, node, tdopts) {
+      // if we're stripping images, output nothing
+      if (options.imageStyle == 'noImage') return '';
+      // if this is an obsidian link, so output that
+      else if (options.imageStyle.startsWith('obsidian')) return `![[${node.getAttribute('src')}]]`;
+      // otherwise, output the normal markdown link
+      else {
+        var alt = cleanAttribute(node.getAttribute('alt'));
+        var src = node.getAttribute('src') || '';
+        var title = cleanAttribute(node.getAttribute('title'));
+        var titlePart = title ? ' "' + title + '"' : '';
+        if (options.imageRefStyle == 'referenced') {
+          var id = this.references.length + 1;
+          this.references.push('[fig' + id + ']: ' + src + titlePart);
+          return '![' + alt + '][fig' + id + ']';
+        }
+        else return src ? '![' + alt + ']' + '(' + src + titlePart + ')' : ''
+      }
+    },
+    references: [],
+    append: function (options) {
+      var references = '';
+      if (this.references.length) {
+        references = '\n\n' + this.references.join('\n') + '\n\n';
+        this.references = []; // Reset references
+      }
+      return references
+    }
+
+  });
+
+  // Utility function to check if an element is inside a table
+  function isInsideTable(node) {
+    let parent = node.parentNode;
+    while (parent) {
+      if (parent.nodeName === 'TABLE') {
+        return true;
+      }
+      parent = parent.parentNode;
+    }
+    return false;
+  }
+
+  // add a rule for links
+  turndownService.addRule('links', {
+    filter: (node, tdopts) => {
+      return node.nodeName == 'A' && node.getAttribute('href')
+    },
+    replacement: (content, node, tdopts) => {
+      // get the href
+      const href = validateUri(node.getAttribute('href'), article.baseURI);
+      
+      // If we're in a table AND strip links is enabled, just return the text content
+      if (isInsideTable(node) && options.tableFormatting?.stripLinks === true) {
+        return content
+      }
+      
+      // Otherwise, convert to proper markdown link format
+      const title = cleanAttribute(node.getAttribute('title'));
+      const titlePart = title ? ` "${title}"` : '';
+      return `[${content}](${href}${titlePart})`
+    }
+  });
+
+  // handle multiple lines math
+  turndownService.addRule('mathjax', {
+    filter(node, options) {
+      return article.math.hasOwnProperty(node.id);
+    },
+    replacement(content, node, options) {
+      const math = article.math[node.id];
+      let tex = math.tex.trim().replaceAll('\xa0', '');
+
+      if (math.inline) {
+        tex = tex.replaceAll('\n', ' ');
+        return `$${tex}$`;
+      }
+      else
+        return `$$\n${tex}\n$$`;
+    }
+  });
+
+  function repeat(character, count) {
+    return Array(count + 1).join(character);
+  }
+
+  function convertToFencedCodeBlock(node, options) {
+    node.innerHTML = node.innerHTML.replaceAll('<br-keep></br-keep>', '<br>');
+    const langMatch = node.id?.match(/code-lang-(.+)/);
+    const language = langMatch?.length > 0 ? langMatch[1] : '';
+
+    var code;
+
+    if (language) {
+      var div = document.createElement('div');
+      document.body.appendChild(div);
+      div.appendChild(node);
+      code = node.innerText;
+      div.remove();
+    } else {
+      code = node.innerHTML;
+    }
+
+    var fenceChar = options.fence.charAt(0);
+    var fenceSize = 3;
+    var fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+
+    var match;
+    while ((match = fenceInCodeRegex.exec(code))) {
+      if (match[0].length >= fenceSize) {
+        fenceSize = match[0].length + 1;
+      }
+    }
+
+    var fence = repeat(fenceChar, fenceSize);
+
+    return (
+      '\n\n' + fence + language + '\n' +
+      code.replace(/\n$/, '') +
+      '\n' + fence + '\n\n'
+    )
+  }
+
+  turndownService.addRule('fencedCodeBlock', {
+    filter: function (node, options) {
+      return (
+        options.codeBlockStyle === 'fenced' &&
+        node.nodeName === 'PRE' &&
+        node.firstChild &&
+        node.firstChild.nodeName === 'CODE'
+      );
+    },
+    replacement: function (content, node, options) {
+      return convertToFencedCodeBlock(node.firstChild, options);
+    }
+  });
+
+  // handle <pre> as code blocks
+  turndownService.addRule('pre', {
+    filter: (node, tdopts) => node.nodeName == 'PRE' && (!node.firstChild || node.firstChild.nodeName != 'CODE'),
+    replacement: (content, node, tdopts) => {
+      return convertToFencedCodeBlock(node, tdopts);
+    }
+  });
+
+  let markdown = options.frontmatter + turndownService.turndown(content)
+      + options.backmatter;
+
+  // strip out non-printing special characters which CodeMirror displays as a red dot
+  // see: https://codemirror.net/doc/manual.html#option_specialChars
+  markdown = markdown.replace(/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028\u2029\ufeff\ufff9-\ufffc]/g, '');
+  
+  return { markdown: markdown, imageList: imageList };
+}
+
+/**
+* Get article from DOM string
+*/
+async function getArticleFromDom(domString) {
+ // Parse the DOM
+ const parser = new DOMParser();
+ const dom = parser.parseFromString(domString, "text/html");
+
+ if (dom.documentElement.nodeName == "parsererror") {
+   console.error("Error while parsing DOM");
+ }
+
+ const math = {};
+
+ const storeMathInfo = (el, mathInfo) => {
+   let randomId = URL.createObjectURL(new Blob([]));
+   randomId = randomId.substring(randomId.length - 36);
+   el.id = randomId;
+   math[randomId] = mathInfo;
+ };
+
+ // Process MathJax elements (same as original)
+ dom.body.querySelectorAll('script[id^=MathJax-Element-]')?.forEach(mathSource => {
+   const type = mathSource.attributes.type.value
+   storeMathInfo(mathSource, {
+     tex: mathSource.innerText,
+     inline: type ? !type.includes('mode=display') : false
+   });
+ });
+
+ // Process MathJax 3 elements
+ dom.body.querySelectorAll('[marksnip-latex]')?.forEach(mathJax3Node => {
+   // Same implementation as original
+   const tex = mathJax3Node.getAttribute('marksnip-latex');
+   const display = mathJax3Node.getAttribute('display');
+   const inline = !(display && display === 'true');
+
+   const mathNode = document.createElement(inline ? "i" : "p");
+   mathNode.textContent = tex;
+   mathJax3Node.parentNode.insertBefore(mathNode, mathJax3Node.nextSibling);
+   mathJax3Node.parentNode.removeChild(mathJax3Node);
+
+   storeMathInfo(mathNode, {
+     tex: tex,
+     inline: inline
+   });
+ });
+
+ // Process KaTeX elements
+ dom.body.querySelectorAll('.katex-mathml')?.forEach(kaTeXNode => {
+   storeMathInfo(kaTeXNode, {
+     tex: kaTeXNode.querySelector('annotation').textContent,
+     inline: true
+   });
+ });
+
+ // Process code highlight elements
+ dom.body.querySelectorAll('[class*=highlight-text],[class*=highlight-source]')?.forEach(codeSource => {
+   const language = codeSource.className.match(/highlight-(?:text|source)-([a-z0-9]+)/)?.[1];
+   if (codeSource.firstChild && codeSource.firstChild.nodeName == "PRE") {
+     codeSource.firstChild.id = `code-lang-${language}`;
+   }
+ });
+
+ // Process language-specific code elements
+ dom.body.querySelectorAll('[class*=language-]')?.forEach(codeSource => {
+   const language = codeSource.className.match(/language-([a-z0-9]+)/)?.[1];
+   codeSource.id = `code-lang-${language}`;
+ });
+
+ // Process BR tags in PRE elements
+ dom.body.querySelectorAll('pre br')?.forEach(br => {
+   // We need to keep <br> tags because they are removed by Readability.js
+   br.outerHTML = '<br-keep></br-keep>';
+ });
+
+ // Process code highlight elements with no language
+ dom.body.querySelectorAll('.codehilite > pre')?.forEach(codeSource => {
+   if (codeSource.firstChild && codeSource.firstChild.nodeName !== 'CODE' && !codeSource.className.includes('language')) {
+     codeSource.id = `code-lang-text`;
+   }
+ });
+
+ // Process headers to avoid Readability.js stripping them
+ dom.body.querySelectorAll('h1, h2, h3, h4, h5, h6')?.forEach(header => {
+   header.className = '';
+   header.outerHTML = header.outerHTML;
+ });
+
+ // Simplify the DOM into an article
+ const article = new Readability(dom).parse();
+
+ // Add essential metadata
+ article.baseURI = dom.baseURI;
+ article.pageTitle = dom.title;
+ 
+ // Extract URL information
+ const url = new URL(dom.baseURI);
+ article.hash = url.hash;
+ article.host = url.host;
+ article.origin = url.origin;
+ article.hostname = url.hostname;
+ article.pathname = url.pathname;
+ article.port = url.port;
+ article.protocol = url.protocol;
+ article.search = url.search;
+
+ // Extract meta tags if head exists
+ if (dom.head) {
+   // Extract keywords
+   article.keywords = dom.head.querySelector('meta[name="keywords"]')?.content?.split(',')?.map(s => s.trim());
+
+   // Add all meta tags for template variables
+   dom.head.querySelectorAll('meta[name][content], meta[property][content]')?.forEach(meta => {
+     const key = (meta.getAttribute('name') || meta.getAttribute('property'));
+     const val = meta.getAttribute('content');
+     if (key && val && !article[key]) {
+       article[key] = val;
+     }
+   });
+ }
+
+ article.math = math;
+
+ return article;
+}
+
+/**
+* Get article from tab content
+*/
+async function getArticleFromContent(tabId, selection = false) {
+ try {
+   // Execute content script to get DOM and selection
+   const results = await browser.scripting.executeScript({
+     target: { tabId: tabId },
+     function: () => {
+       if (typeof getSelectionAndDom === 'function') {
+         return getSelectionAndDom();
+       }
+       return null;
+     }
+   });
+
+   // Check if we need to inject the content script
+   if (!results || !results[0]?.result) {
+     await browser.scripting.executeScript({
+       target: { tabId: tabId },
+       files: ["/contentScript/contentScript.js"]
+     });
+     
+     // Try again after injecting
+     const retryResults = await browser.scripting.executeScript({
+       target: { tabId: tabId },
+       function: () => getSelectionAndDom()
+     });
+     
+     if (retryResults && retryResults[0]?.result) {
+       const article = await getArticleFromDom(retryResults[0].result.dom);
+       
+       if (selection && retryResults[0].result.selection) {
+         article.content = retryResults[0].result.selection;
+       }
+       
+       return article;
+     }
+   } else {
+     const article = await getArticleFromDom(results[0].result.dom);
+     
+     if (selection && results[0].result.selection) {
+       article.content = results[0].result.selection;
+     }
+     
+     return article;
+   }
+ } catch (error) {
+   console.error("Error getting content from tab:", error);
+   return null;
+ }
+}
+
+/**
+* Format title using template
+*/
+async function formatTitle(article) {
+ const options = await getOptions();
+ 
+ let title = textReplace(options.title, article, options.disallowedChars + '/');
+ title = title.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+ return title;
+}
+
+/**
+* Format Markdown clips folder
+*/
+async function formatMdClipsFolder(article) {
+ const options = await getOptions();
+
+ let mdClipsFolder = '';
+ if (options.mdClipsFolder && options.downloadMode == 'downloadsApi') {
+   mdClipsFolder = textReplace(options.mdClipsFolder, article, options.disallowedChars);
+   mdClipsFolder = mdClipsFolder.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+   if (!mdClipsFolder.endsWith('/')) mdClipsFolder += '/';
+ }
+
+ return mdClipsFolder;
+}
+
+/**
+* Format Obsidian folder
+*/
+async function formatObsidianFolder(article) {
+ const options = await getOptions();
+
+ let obsidianFolder = '';
+ if (options.obsidianFolder) {
+   obsidianFolder = textReplace(options.obsidianFolder, article, options.disallowedChars);
+   obsidianFolder = obsidianFolder.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+   if (!obsidianFolder.endsWith('/')) obsidianFolder += '/';
+ }
+
+ return obsidianFolder;
+}
+
+/**
+* Replace placeholder strings with article info
+*/
+function textReplace(string, article, disallowedChars = null) {
+ // Same implementation as original
+ for (const key in article) {
+   if (article.hasOwnProperty(key) && key != "content") {
+     let s = (article[key] || '') + '';
+     if (s && disallowedChars) s = generateValidFileName(s, disallowedChars);
+
+     string = string.replace(new RegExp('{' + key + '}', 'g'), s)
+       .replace(new RegExp('{' + key + ':kebab}', 'g'), s.replace(/ /g, '-').toLowerCase())
+       .replace(new RegExp('{' + key + ':snake}', 'g'), s.replace(/ /g, '_').toLowerCase())
+       .replace(new RegExp('{' + key + ':camel}', 'g'), s.replace(/ ./g, (str) => str.trim().toUpperCase()).replace(/^./, (str) => str.toLowerCase()))
+       .replace(new RegExp('{' + key + ':pascal}', 'g'), s.replace(/ ./g, (str) => str.trim().toUpperCase()).replace(/^./, (str) => str.toUpperCase()));
+   }
+ }
+
+ // Replace date formats
+ const now = new Date();
+ const dateRegex = /{date:(.+?)}/g;
+ const matches = string.match(dateRegex);
+ if (matches && matches.forEach) {
+   matches.forEach(match => {
+     const format = match.substring(6, match.length - 1);
+     const dateString = moment(now).format(format);
+     string = string.replaceAll(match, dateString);
+   });
+ }
+
+ // Replace keywords
+ const keywordRegex = /{keywords:?(.*)?}/g;
+ const keywordMatches = string.match(keywordRegex);
+ if (keywordMatches && keywordMatches.forEach) {
+   keywordMatches.forEach(match => {
+     let seperator = match.substring(10, match.length - 1);
+     try {
+       seperator = JSON.parse(JSON.stringify(seperator).replace(/\\\\/g, '\\'));
+     }
+     catch { }
+     const keywordsString = (article.keywords || []).join(seperator);
+     string = string.replace(new RegExp(match.replace(/\\/g, '\\\\'), 'g'), keywordsString);
+   });
+ }
+
+ // Replace anything left in curly braces
+ const defaultRegex = /{(.*?)}/g;
+ string = string.replace(defaultRegex, '');
+
+ return string;
+}
+
+/**
+* Generate valid filename
+*/
+function generateValidFileName(title, disallowedChars = null) {
+ if (!title) return title;
+ else title = title + '';
+ // Remove < > : " / \ | ? * 
+ var illegalRe = /[\/\?<>\\:\*\|":]/g;
+ // And non-breaking spaces
+ var name = title.replace(illegalRe, "").replace(new RegExp('\u00A0', 'g'), ' ');
+ 
+ if (disallowedChars) {
+   for (let c of disallowedChars) {
+     if (`[\\^$.|?*+()`.includes(c)) c = `\\${c}`;
+     name = name.replace(new RegExp(c, 'g'), '');
+   }
+ }
+ 
+ return name;
+}
+
+/**
+* Clean attribute
+*/
+function cleanAttribute(attribute) {
+ return attribute ? attribute.replace(/(\n+\s*)+/g, '\n') : '';
+}
+
+/**
+* Validate URI
+*/
+function validateUri(href, baseURI) {
+ // Check if the href is a valid url
+ try {
+   new URL(href);
+ }
+ catch {
+   // If it's not a valid url, that likely means we have to prepend the base uri
+   const baseUri = new URL(baseURI);
+
+   // If the href starts with '/', we need to go from the origin
+   if (href.startsWith('/')) {
+     href = baseUri.origin + href;
+   }
+   // Otherwise we need to go from the local folder
+   else {
+     href = baseUri.href + (baseUri.href.endsWith('/') ? '' : '/') + href;
+   }
+ }
+ return href;
+}
+
+/**
+* Get image filename
+*/
+function getImageFilename(src, options, prependFilePath = true) {
+ const slashPos = src.lastIndexOf('/');
+ const queryPos = src.indexOf('?');
+ let filename = src.substring(slashPos + 1, queryPos > 0 ? queryPos : src.length);
+
+ let imagePrefix = (options.imagePrefix || '');
+
+ if (prependFilePath && options.title.includes('/')) {
+   imagePrefix = options.title.substring(0, options.title.lastIndexOf('/') + 1) + imagePrefix;
+ }
+ else if (prependFilePath) {
+   imagePrefix = options.title + (imagePrefix.startsWith('/') ? '' : '/') + imagePrefix;
+ }
+ 
+ if (filename.includes(';base64,')) {
+   // This is a base64 encoded image
+   filename = 'image.' + filename.substring(0, filename.indexOf(';'));
+ }
+ 
+ let extension = filename.substring(filename.lastIndexOf('.'));
+ if (extension == filename) {
+   // There is no extension, give it an 'idunno' extension
+   filename = filename + '.idunno';
+ }
+
+ filename = generateValidFileName(filename, options.disallowedChars);
+
+ return imagePrefix + filename;
+}
+
+/**
+* Pre-download images
+*/
+async function preDownloadImages(imageList, markdown) {
+ const options = await getOptions();
+ let newImageList = {};
+
+ // Process all images in parallel
+ await Promise.all(Object.entries(imageList).map(([src, filename]) => new Promise(async (resolve, reject) => {
+   try {
+     // Fetch the image using fetch instead of XMLHttpRequest
+     const response = await fetch(src);
+     const blob = await response.blob();
+
+     if (options.imageStyle == 'base64') {
+       // Convert to base64
+       const reader = new FileReader();
+       reader.onloadend = () => {
+         markdown = markdown.replaceAll(src, reader.result);
+         resolve();
+       };
+       reader.readAsDataURL(blob);
+     } else {
+       let newFilename = filename;
+       
+       // Handle unknown extensions
+       if (newFilename.endsWith('.idunno')) {
+         const mimeType = blob.type || 'application/octet-stream';
+         const extension = mimedb[mimeType] || 'bin';
+         newFilename = filename.replace('.idunno', `.${extension}`);
+
+         // Update filename in markdown
+         if (!options.imageStyle.startsWith("obsidian")) {
+           markdown = markdown.replaceAll(
+             filename.split('/').map(s => encodeURI(s)).join('/'),
+             newFilename.split('/').map(s => encodeURI(s)).join('/')
+           );
+         } else {
+           markdown = markdown.replaceAll(filename, newFilename);
+         }
+       }
+
+       // Create object URL for the blob
+       const blobUrl = URL.createObjectURL(blob);
+       newImageList[blobUrl] = newFilename;
+       resolve();
+     }
+   } catch (error) {
+     console.error('Error pre-downloading image:', error);
+     reject(`A network error occurred attempting to download ${src}`);
+   }
+ })));
+
+ return { imageList: newImageList, markdown: markdown };
+}
+
+/**
+* Download Markdown file
+*/
+async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsFolder = '') {
+ const options = await getOptions();
+ 
+ // Download via the downloads API
+ if (options.downloadMode == 'downloadsApi' && browser.downloads) {
+   try {
+     // Create blob for markdown content
+     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+     const url = URL.createObjectURL(blob);
+     
+     if(mdClipsFolder && !mdClipsFolder.endsWith('/')) mdClipsFolder += '/';
+     
+     // Start the download
+     const id = await browser.downloads.download({
+       url: url,
+       filename: mdClipsFolder + title + ".md",
+       saveAs: options.saveAs
+     });
+
+     // Notify service worker about download completion
+     browser.runtime.sendMessage({
+       type: 'download-complete',
+       downloadId: id,
+       url: url
+     });
+
+     // Download images if enabled
+     if (options.downloadImages) {
+       // Get the relative path for image downloads
+       const destPath = mdClipsFolder + title.substring(0, title.lastIndexOf('/'));
+       const adjustedDestPath = destPath && !destPath.endsWith('/') ? destPath + '/' : destPath;
+       
+       // Download each image
+       for (const [src, filename] of Object.entries(imageList)) {
+         const imgId = await browser.downloads.download({
+           url: src,
+           filename: adjustedDestPath ? adjustedDestPath + filename : filename,
+           saveAs: false
+         });
+
+         // Notify service worker about download completion
+         browser.runtime.sendMessage({
+           type: 'download-complete',
+           downloadId: imgId,
+           url: src
+         });
+       }
+     }
+   } catch (err) {
+     console.error("Download failed", err);
+   }
+ } else {
+   // Use content script method
+   try {
+     const filename = mdClipsFolder + generateValidFileName(title, options.disallowedChars) + ".md";
+     
+     // Base64 encode the markdown
+     const base64Content = base64EncodeUnicode(markdown);
+     
+     // Execute script in tab to download
+     await browser.scripting.executeScript({
+       target: { tabId: tabId },
+       func: (filename, content) => {
+         // Decode base64 content
+         const decoded = atob(content);
+         // Create data URI
+         const dataUri = `data:text/markdown;base64,${btoa(decoded)}`;
+         
+         // Create and click download link
+         const link = document.createElement('a');
+         link.download = filename;
+         link.href = dataUri;
+         link.click();
+       },
+       args: [filename, base64Content]
+     });
+   } catch (error) {
+     console.error("Failed to execute download script:", error);
+   }
+ }
+}
+
+/**
+* Base64 encode Unicode string
+*/
+function base64EncodeUnicode(str) {
+ // Encode UTF-8 string to base64
+ const utf8Bytes = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
+   return String.fromCharCode('0x' + p1);
+ });
+
+ return btoa(utf8Bytes);
+}
+
+/**
+* Convert to fenced code block
+*/
+function convertToFencedCodeBlock(node, options) {
+ node.innerHTML = node.innerHTML.replaceAll('<br-keep></br-keep>', '<br>');
+ const langMatch = node.id?.match(/code-lang-(.+)/);
+ const language = langMatch?.length > 0 ? langMatch[1] : '';
+
+ var code;
+
+ if (language) {
+   var div = document.createElement('div');
+   document.body.appendChild(div);
+   div.appendChild(node);
+   code = node.innerText;
+   div.remove();
+ } else {
+   code = node.innerHTML;
+ }
+
+ var fenceChar = options.fence.charAt(0);
+ var fenceSize = 3;
+ var fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+
+ var match;
+ while ((match = fenceInCodeRegex.exec(code))) {
+   if (match[0].length >= fenceSize) {
+     fenceSize = match[0].length + 1;
+   }
+ }
+
+ var fence = repeat(fenceChar, fenceSize);
+
+ return (
+   '\n\n' + fence + language + '\n' +
+   code.replace(/\n$/, '') +
+   '\n' + fence + '\n\n'
+ );
+}
+
+/**
+* Repeat string
+*/
+function repeat(character, count) {
+ return Array(count + 1).join(character);
+}
+
+/**
+ * Handle messages from service worker
+ */
+async function handleMessages(message, sender) {
+  if (!message.target || message.target !== 'offscreen') {
+    return; // Not for this context
+  }
+
+  switch (message.type) {
+    case 'process-content':
+      await processContent(message);
+      break;
+    case 'download-markdown':
+      await downloadMarkdown(
+        message.markdown,
+        message.title,
+        message.tabId,
+        message.imageList,
+        message.mdClipsFolder
+      );
+      break;
+    case 'process-context-menu':
+      await processContextMenu(message);
+      break;
+    case 'copy-to-clipboard':
+      await copyToClipboard(message.text);
+      break;
+  }
+}
+
+/**
+ * Get article content from tab
+ */
+async function handleGetArticleContent(message) {
+  try {
+    const { tabId, selection, requestId } = message;
+    
+    // First ensure the content script is loaded
+    await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        // Just check if the function exists
+        return typeof getSelectionAndDom === 'function';
+      }
+    });
+    
+    // Get selection and DOM
+    const results = await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        if (typeof getSelectionAndDom === 'function') {
+          return getSelectionAndDom();
+        }
+        return null;
+      }
+    });
+    
+    if (results && results[0]?.result) {
+      const article = await getArticleFromDom(results[0].result.dom);
+      
+      // Handle selection if needed
+      if (selection && results[0].result.selection) {
+        article.content = results[0].result.selection;
+      }
+      
+      // Send result back to service worker
+      await browser.runtime.sendMessage({
+        type: 'article-result',
+        requestId: requestId,
+        article: article
+      });
+    } else {
+      throw new Error('Failed to get content from tab');
+    }
+  } catch (error) {
+    console.error('Error getting article content:', error);
+    await browser.runtime.sendMessage({
+      type: 'article-error',
+      requestId: message.requestId,
+      error: error.message
+    });
+  }
+}
