@@ -44,6 +44,18 @@ async function handleMessages(message, sender, sendResponse) {
     case "download-complete":
       handleDownloadComplete(message);
       break;
+    case "execute-script-in-tab":
+      await executeScriptInTab(message.tabId, message.code);
+      break;
+
+    case "get-tab-content":
+      await getTabContentForOffscreen(message.tabId, message.selection, message.requestId);
+      break;
+
+    case "forward-get-article-content":
+      await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
+      break;
+
     case "execute-content-download":
       await executeContentDownload(message.tabId, message.filename, message.content);
       break;
@@ -51,7 +63,103 @@ async function handleMessages(message, sender, sendResponse) {
 }
 
 /**
+ * Execute script in tab  - helper function for offscreen document
+ * @param {number} tabId - Tab ID to execute script in
+ * @param {string} codeString - Code to execute in the tab
+ */ 
+async function executeScriptInTab(tabId, codeString) {
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: (code) => {
+        return eval(code);
+      },
+      args: [codeString]
+    });
+  } catch (error) {
+    console.error("Failed to execute script in tab:", error);
+  }
+}
+
+/**
+ * Get tab content for offscreen document
+ * @param {number} tabId - Tab ID to get content from
+ *  @param {boolean} selection - Whether to get selection or full content
+ * @param {string} requestId - Request ID to track this specific request
+ */
+async function getTabContentForOffscreen(tabId, selection, requestId) {
+  try {
+    await ensureScripts(tabId);
+    
+    const results = await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        if (typeof getSelectionAndDom === 'function') {
+          return getSelectionAndDom();
+        }
+        return null;
+      }
+    });
+    
+    if (results && results[0]?.result) {
+      // Forward the result to the offscreen document
+      await browser.runtime.sendMessage({
+        type: 'article-content-result',
+        requestId: requestId,
+        article: {
+          dom: results[0].result.dom,
+          selection: selection ? results[0].result.selection : null
+        }
+      });
+    } else {
+      throw new Error('Failed to get content from tab');
+    }
+  } catch (error) {
+    console.error("Error getting tab content:", error);
+  }
+}
+
+/**
+ * Forward get article content to offscreen document
+ * @param {number} tabId - Tab ID to forward content from
+ * @param {boolean} selection - Whether to get selection or full content
+ * @param {string} originalRequestId - Original request ID to track this specific request
+ * */
+async function forwardGetArticleContent(tabId, selection, originalRequestId) {
+  try {
+    await ensureScripts(tabId);
+    
+    const results = await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        if (typeof getSelectionAndDom === 'function') {
+          return getSelectionAndDom();
+        }
+        return null;
+      }
+    });
+    
+    if (results && results[0]?.result) {
+      // Forward the DOM data to the offscreen document for processing
+      await browser.runtime.sendMessage({
+        type: 'article-dom-data',
+        requestId: originalRequestId,
+        dom: results[0].result.dom,
+        selection: selection ? results[0].result.selection : null
+      });
+    } else {
+      throw new Error('Failed to get content from tab');
+    }
+  } catch (error) {
+    console.error("Error forwarding article content:", error);
+  }
+}
+
+/**
  * Execute content download, helper function for offscreen document
+ * @param {number} tabId - Tab ID to execute download in
+ * @param {string} filename - Filename for download
+ * @param {string} base64Content - Base64 encoded content to download
  */
 async function executeContentDownload(tabId, filename, base64Content) {
   try {

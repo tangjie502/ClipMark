@@ -79,18 +79,15 @@ const toggleDownloadImages = options => {
     options.downloadImages = !options.downloadImages;
     document.querySelector("#downloadImages").classList.toggle("checked");
     browser.storage.sync.set(options).then(() => {
-        // Update the main context menu item
         return browser.contextMenus.update("toggle-downloadImages", {
             checked: options.downloadImages
         });
     }).then(() => {
-        // Try to update the tab context menu item if it exists
+        // Try to update tab context menu if it exists
         return browser.contextMenus.update("tabtoggle-downloadImages", {
             checked: options.downloadImages
         }).catch(err => {
             // Silently ignore if this menu doesn't exist
-            // This could happen if tab menus aren't supported in this browser
-            // or if they're not created for some reason
             console.debug("Tab context menu not available:", err.message);
         });
     }).catch((error) => {

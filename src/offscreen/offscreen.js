@@ -184,12 +184,11 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
  * Execute script in tab
  */
 async function executeScriptInTab(tabId, codeString) {
-  return browser.scripting.executeScript({
-    target: { tabId: tabId },
-    func: (code) => {
-      return eval(code);
-    },
-    args: [codeString]
+  // Instead of directly calling browser.scripting, send a message to service worker
+  return browser.runtime.sendMessage({
+    type: "execute-script-in-tab",
+    tabId: tabId,
+    code: codeString
   });
 }
 
@@ -727,53 +726,42 @@ async function getArticleFromDom(domString) {
 * Get article from tab content
 */
 async function getArticleFromContent(tabId, selection = false) {
- try {
-   // Execute content script to get DOM and selection
-   const results = await browser.scripting.executeScript({
-     target: { tabId: tabId },
-     function: () => {
-       if (typeof getSelectionAndDom === 'function') {
-         return getSelectionAndDom();
-       }
-       return null;
-     }
-   });
-
-   // Check if we need to inject the content script
-   if (!results || !results[0]?.result) {
-     await browser.scripting.executeScript({
-       target: { tabId: tabId },
-       files: ["/contentScript/contentScript.js"]
-     });
-     
-     // Try again after injecting
-     const retryResults = await browser.scripting.executeScript({
-       target: { tabId: tabId },
-       function: () => getSelectionAndDom()
-     });
-     
-     if (retryResults && retryResults[0]?.result) {
-       const article = await getArticleFromDom(retryResults[0].result.dom);
-       
-       if (selection && retryResults[0].result.selection) {
-         article.content = retryResults[0].result.selection;
-       }
-       
-       return article;
-     }
-   } else {
-     const article = await getArticleFromDom(results[0].result.dom);
-     
-     if (selection && results[0].result.selection) {
-       article.content = results[0].result.selection;
-     }
-     
-     return article;
-   }
- } catch (error) {
-   console.error("Error getting content from tab:", error);
-   return null;
- }
+  try {
+    // Request the service worker to get content via messaging
+    const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+    
+    // Create a promise that will be resolved when the response is received
+    const resultPromise = new Promise((resolve, reject) => {
+      const messageListener = (message) => {
+        if (message.type === 'article-content-result' && message.requestId === requestId) {
+          browser.runtime.onMessage.removeListener(messageListener);
+          resolve(message.article);
+        }
+      };
+      
+      // Set timeout to prevent hanging
+      setTimeout(() => {
+        browser.runtime.onMessage.removeListener(messageListener);
+        reject(new Error('Timeout getting article content'));
+      }, 30000);
+      
+      browser.runtime.onMessage.addListener(messageListener);
+    });
+    
+    // Send the request to service worker
+    await browser.runtime.sendMessage({
+      type: "get-tab-content",
+      tabId: tabId,
+      selection: selection,
+      requestId: requestId
+    });
+    
+    // Wait for the result
+    return await resultPromise;
+  } catch (error) {
+    console.error("Error getting content from tab:", error);
+    return null;
+  }
 }
 
 /**
@@ -1151,45 +1139,16 @@ async function handleGetArticleContent(message) {
   try {
     const { tabId, selection, requestId } = message;
     
-    // First ensure the content script is loaded
-    await browser.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        // Just check if the function exists
-        return typeof getSelectionAndDom === 'function';
-      }
+    // Forward the request to the service worker
+    await browser.runtime.sendMessage({
+      type: 'forward-get-article-content',
+      originalRequestId: requestId,
+      tabId: tabId,
+      selection: selection
     });
     
-    // Get selection and DOM
-    const results = await browser.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        if (typeof getSelectionAndDom === 'function') {
-          return getSelectionAndDom();
-        }
-        return null;
-      }
-    });
-    
-    if (results && results[0]?.result) {
-      const article = await getArticleFromDom(results[0].result.dom);
-      
-      // Handle selection if needed
-      if (selection && results[0].result.selection) {
-        article.content = results[0].result.selection;
-      }
-      
-      // Send result back to service worker
-      await browser.runtime.sendMessage({
-        type: 'article-result',
-        requestId: requestId,
-        article: article
-      });
-    } else {
-      throw new Error('Failed to get content from tab');
-    }
   } catch (error) {
-    console.error('Error getting article content:', error);
+    console.error('Error handling get article content:', error);
     await browser.runtime.sendMessage({
       type: 'article-error',
       requestId: message.requestId,
