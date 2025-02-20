@@ -57,15 +57,19 @@ const toggleIncludeTemplate = options => {
     options.includeTemplate = !options.includeTemplate;
     document.querySelector("#includeTemplate").classList.toggle("checked");
     browser.storage.sync.set(options).then(() => {
-        browser.contextMenus.update("toggle-includeTemplate", {
+        return browser.contextMenus.update("toggle-includeTemplate", {
             checked: options.includeTemplate
         });
-        try {
-            browser.contextMenus.update("tabtoggle-includeTemplate", {
-                checked: options.includeTemplate
-            });
-        } catch { }
-        return clipSite()
+    }).then(() => {
+        // Try to update tab context menu if it exists
+        return browser.contextMenus.update("tabtoggle-includeTemplate", {
+            checked: options.includeTemplate
+        }).catch(err => {
+            // Silently ignore if this menu doesn't exist
+            console.debug("Tab context menu not available:", err.message);
+        });
+    }).then(() => {
+        return clipSite();
     }).catch((error) => {
         console.error(error);
     });
@@ -75,18 +79,25 @@ const toggleDownloadImages = options => {
     options.downloadImages = !options.downloadImages;
     document.querySelector("#downloadImages").classList.toggle("checked");
     browser.storage.sync.set(options).then(() => {
-        browser.contextMenus.update("toggle-downloadImages", {
+        // Update the main context menu item
+        return browser.contextMenus.update("toggle-downloadImages", {
             checked: options.downloadImages
         });
-        try {
-            browser.contextMenus.update("tabtoggle-downloadImages", {
-                checked: options.downloadImages
-            });
-        } catch { }
+    }).then(() => {
+        // Try to update the tab context menu item if it exists
+        return browser.contextMenus.update("tabtoggle-downloadImages", {
+            checked: options.downloadImages
+        }).catch(err => {
+            // Silently ignore if this menu doesn't exist
+            // This could happen if tab menus aren't supported in this browser
+            // or if they're not created for some reason
+            console.debug("Tab context menu not available:", err.message);
+        });
     }).catch((error) => {
-        console.error(error);
+        console.error("Error updating options or menus:", error);
     });
 }
+
 const showOrHideClipOption = selection => {
     if (selection) {
         document.getElementById("clipOption").style.display = "flex";

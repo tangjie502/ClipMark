@@ -1066,35 +1066,23 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
    } catch (err) {
      console.error("Download failed", err);
    }
- } else {
-   // Use content script method
-   try {
-     const filename = mdClipsFolder + generateValidFileName(title, options.disallowedChars) + ".md";
-     
-     // Base64 encode the markdown
-     const base64Content = base64EncodeUnicode(markdown);
-     
-     // Execute script in tab to download
-     await browser.scripting.executeScript({
-       target: { tabId: tabId },
-       func: (filename, content) => {
-         // Decode base64 content
-         const decoded = atob(content);
-         // Create data URI
-         const dataUri = `data:text/markdown;base64,${btoa(decoded)}`;
-         
-         // Create and click download link
-         const link = document.createElement('a');
-         link.download = filename;
-         link.href = dataUri;
-         link.click();
-       },
-       args: [filename, base64Content]
-     });
-   } catch (error) {
-     console.error("Failed to execute download script:", error);
-   }
- }
+  } else {
+    // Use content script method via service worker
+    try {
+      const filename = mdClipsFolder + generateValidFileName(title, options.disallowedChars) + ".md";
+      const base64Content = base64EncodeUnicode(markdown);
+      
+      // Send message to service worker to handle the download
+      await browser.runtime.sendMessage({
+        type: "execute-content-download",
+        tabId: tabId,
+        filename: filename,
+        content: base64Content
+      });
+    } catch (error) {
+      console.error("Failed to initiate download:", error);
+    }
+  }
 }
 
 /**

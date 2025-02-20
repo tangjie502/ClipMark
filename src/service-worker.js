@@ -44,6 +44,31 @@ async function handleMessages(message, sender, sendResponse) {
     case "download-complete":
       handleDownloadComplete(message);
       break;
+    case "execute-content-download":
+      await executeContentDownload(message.tabId, message.filename, message.content);
+      break;
+  }
+}
+
+/**
+ * Execute content download, helper function for offscreen document
+ */
+async function executeContentDownload(tabId, filename, base64Content) {
+  try {
+    await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: (filename, content) => {
+        const decoded = atob(content);
+        const dataUri = `data:text/markdown;base64,${btoa(decoded)}`;
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = dataUri;
+        link.click();
+      },
+      args: [filename, base64Content]
+    });
+  } catch (error) {
+    console.error("Failed to execute download script:", error);
   }
 }
 
