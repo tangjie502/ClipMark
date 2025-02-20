@@ -98,6 +98,20 @@ const showOrHideClipOption = selection => {
 
 // Updated clipSite function to use scripting API
 const clipSite = id => {
+    // If no id is provided, get the active tab's id first
+    if (!id) {
+        return browser.tabs.query({
+            currentWindow: true,
+            active: true
+        }).then(tabs => {
+            if (tabs && tabs.length > 0) {
+                return clipSite(tabs[0].id);
+            }
+            throw new Error("No active tab found");
+        });
+    }
+
+    // Rest of the function remains the same
     return browser.scripting.executeScript({
         target: { tabId: id },
         func: () => {
