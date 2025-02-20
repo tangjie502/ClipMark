@@ -33,11 +33,18 @@ async function handleMessages(message, sender) {
         message.title,
         message.tabId,
         message.imageList,
-        message.mdClipsFolder
+        message.mdClipsFolder,
+        message.options
       );
       break;
     case 'process-context-menu':
       await processContextMenu(message);
+      break;
+    case 'copy-to-clipboard':
+      await copyToClipboard(message.text);
+      break;
+    case 'get-article-content':
+      await handleGetArticleContent(message);
       break;
   }
 }
@@ -47,7 +54,7 @@ async function handleMessages(message, sender) {
  */
 async function processContent(message) {
   try {
-    const { data, requestId, tabId } = message;
+    const { data, requestId, tabId, options } = message;
     
     // Get article from DOM
     const article = await getArticleFromDom(data.dom);
@@ -57,12 +64,12 @@ async function processContent(message) {
       article.content = data.selection;
     }
     
-    // Convert to markdown
-    const { markdown, imageList } = await convertArticleToMarkdown(article);
+    // Convert to markdown using passed options
+    const { markdown, imageList } = await convertArticleToMarkdown(article, null, options);
     
-    // Format title and folder
-    article.title = await formatTitle(article);
-    const mdClipsFolder = await formatMdClipsFolder(article);
+    // Format title and folder using passed options
+    article.title = await formatTitle(article, options);
+    const mdClipsFolder = await formatMdClipsFolder(article, options);
     
     // Send results back to service worker
     await browser.runtime.sendMessage({
@@ -89,13 +96,13 @@ async function processContent(message) {
  * Process context menu actions
  */
 async function processContextMenu(message) {
-  const { action, info, tabId } = message;
+  const { action, info, tabId, options } = message;
   
   try {
     if (action === 'download') {
-      await handleContextMenuDownload(info, tabId);
+      await handleContextMenuDownload(info, tabId, options);
     } else if (action === 'copy') {
-      await handleContextMenuCopy(info, tabId);
+      await handleContextMenuCopy(info, tabId, options);
     }
   } catch (error) {
     console.error(`Error processing context menu ${action}:`, error);
@@ -105,28 +112,32 @@ async function processContextMenu(message) {
 /**
  * Handle context menu download action
  */
-async function handleContextMenuDownload(info, tabId) {
+async function handleContextMenuDownload(info, tabId, providedOptions = null) {
+  const options = providedOptions || defaultOptions;
+  
   const article = await getArticleFromContent(tabId, info.menuItemId === "download-markdown-selection");
-  const title = await formatTitle(article);
-  const { markdown, imageList } = await convertArticleToMarkdown(article);
-  const mdClipsFolder = await formatMdClipsFolder(article);
-  await downloadMarkdown(markdown, title, tabId, imageList, mdClipsFolder);
+  const title = await formatTitle(article, options);
+  const { markdown, imageList } = await convertArticleToMarkdown(article, null, options);
+  const mdClipsFolder = await formatMdClipsFolder(article, options);
+  await downloadMarkdown(markdown, title, tabId, imageList, mdClipsFolder, options);
 }
 
 /**
  * Handle context menu copy action
  */
-async function handleContextMenuCopy(info, tabId) {
+async function handleContextMenuCopy(info, tabId, providedOptions = null) {
   const platformOS = navigator.platform;
   const folderSeparator = platformOS.indexOf("Win") === 0 ? "\\" : "/";
+  const options = providedOptions || defaultOptions;
 
   if (info.menuItemId === "copy-markdown-link") {
-    const options = await getOptions();
-    options.frontmatter = options.backmatter = '';
+    // Don't call getOptions() - use the passed options
+    const localOptions = {...options};
+    localOptions.frontmatter = localOptions.backmatter = '';
     const article = await getArticleFromContent(tabId, false);
     const { markdown } = turndown(
       `<a href="${info.linkUrl}">${info.linkText || info.selectionText}</a>`,
-      { ...options, downloadImages: false },
+      { ...localOptions, downloadImages: false },
       article
     );
     await copyToClipboard(markdown);
@@ -138,32 +149,32 @@ async function handleContextMenuCopy(info, tabId) {
   else if (info.menuItemId === "copy-markdown-obsidian") {
     const article = await getArticleFromContent(tabId, true);
     const title = article.title;
-    const options = await getOptions();
+    // Don't call getOptions()
     const obsidianVault = options.obsidianVault;
-    const obsidianFolder = await formatObsidianFolder(article);
-    const { markdown } = await convertArticleToMarkdown(article, false);
+    const obsidianFolder = await formatObsidianFolder(article, options);
+    const { markdown } = await convertArticleToMarkdown(article, false, options);
     await copyToClipboard(markdown);
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
     await browser.tabs.update({
-      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title)}`
+      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title, options.disallowedChars)}`
     });
   }
   else if (info.menuItemId === "copy-markdown-obsall") {
     const article = await getArticleFromContent(tabId, false);
     const title = article.title;
-    const options = await getOptions();
+    // Don't call getOptions()
     const obsidianVault = options.obsidianVault;
-    const obsidianFolder = await formatObsidianFolder(article);
-    const { markdown } = await convertArticleToMarkdown(article, false);
+    const obsidianFolder = await formatObsidianFolder(article, options);
+    const { markdown } = await convertArticleToMarkdown(article, false, options);
     await copyToClipboard(markdown);
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
     await browser.tabs.update({
-      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title)}`
+      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title, options.disallowedChars)}`
     });
   }
   else {
     const article = await getArticleFromContent(tabId, info.menuItemId === "copy-markdown-selection");
-    const { markdown } = await convertArticleToMarkdown(article, false);
+    const { markdown } = await convertArticleToMarkdown(article, false, options);
     await copyToClipboard(markdown);
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
   }
@@ -193,11 +204,12 @@ async function copyToClipboard(text) {
 }
 
 /**
- * Convert article to markdown
- * This uses the original turndown function from background.js
+ * Convert article to markdown with options provided
  */
-async function convertArticleToMarkdown(article, downloadImages = null) {
-  const options = await getOptions();
+async function convertArticleToMarkdown(article, downloadImages = null, providedOptions = null) {
+  // Use provided options or fallback to default options
+  const options = providedOptions || defaultOptions;
+  
   if (downloadImages != null) {
     options.downloadImages = downloadImages;
   }
@@ -765,46 +777,46 @@ async function getArticleFromContent(tabId, selection = false) {
 }
 
 /**
-* Format title using template
-*/
-async function formatTitle(article) {
- const options = await getOptions();
- 
- let title = textReplace(options.title, article, options.disallowedChars + '/');
- title = title.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
- return title;
+ * Format title using template with provided options
+ */
+async function formatTitle(article, providedOptions = null) {
+  const options = providedOptions || defaultOptions;
+  
+  let title = textReplace(options.title, article, options.disallowedChars + '/');
+  title = title.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+  return title;
 }
 
 /**
-* Format Markdown clips folder
-*/
-async function formatMdClipsFolder(article) {
- const options = await getOptions();
+ * Format Markdown clips folder with provided options
+ */
+async function formatMdClipsFolder(article, providedOptions = null) {
+  const options = providedOptions || defaultOptions;
 
- let mdClipsFolder = '';
- if (options.mdClipsFolder && options.downloadMode == 'downloadsApi') {
-   mdClipsFolder = textReplace(options.mdClipsFolder, article, options.disallowedChars);
-   mdClipsFolder = mdClipsFolder.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
-   if (!mdClipsFolder.endsWith('/')) mdClipsFolder += '/';
- }
+  let mdClipsFolder = '';
+  if (options.mdClipsFolder && options.downloadMode == 'downloadsApi') {
+    mdClipsFolder = textReplace(options.mdClipsFolder, article, options.disallowedChars);
+    mdClipsFolder = mdClipsFolder.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+    if (!mdClipsFolder.endsWith('/')) mdClipsFolder += '/';
+  }
 
- return mdClipsFolder;
+  return mdClipsFolder;
 }
 
 /**
-* Format Obsidian folder
-*/
-async function formatObsidianFolder(article) {
- const options = await getOptions();
+ * Format Obsidian folder with provided options
+ */
+async function formatObsidianFolder(article, providedOptions = null) {
+  const options = providedOptions || defaultOptions;
 
- let obsidianFolder = '';
- if (options.obsidianFolder) {
-   obsidianFolder = textReplace(options.obsidianFolder, article, options.disallowedChars);
-   obsidianFolder = obsidianFolder.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
-   if (!obsidianFolder.endsWith('/')) obsidianFolder += '/';
- }
+  let obsidianFolder = '';
+  if (options.obsidianFolder) {
+    obsidianFolder = textReplace(options.obsidianFolder, article, options.disallowedChars);
+    obsidianFolder = obsidianFolder.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+    if (!obsidianFolder.endsWith('/')) obsidianFolder += '/';
+  }
 
- return obsidianFolder;
+  return obsidianFolder;
 }
 
 /**
@@ -947,9 +959,9 @@ function getImageFilename(src, options, prependFilePath = true) {
 /**
 * Pre-download images
 */
-async function preDownloadImages(imageList, markdown) {
- const options = await getOptions();
- let newImageList = {};
+async function preDownloadImages(imageList, markdown, providedOptions = null) {
+  const options = providedOptions || defaultOptions;
+  let newImageList = {};
 
  // Process all images in parallel
  await Promise.all(Object.entries(imageList).map(([src, filename]) => new Promise(async (resolve, reject) => {
@@ -1003,8 +1015,8 @@ async function preDownloadImages(imageList, markdown) {
 /**
 * Download Markdown file
 */
-async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsFolder = '') {
- const options = await getOptions();
+async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsFolder = '', providedOptions = null) {
+  const options = providedOptions || defaultOptions;
  
  // Download via the downloads API
  if (options.downloadMode == 'downloadsApi' && browser.downloads) {
@@ -1142,36 +1154,6 @@ function convertToFencedCodeBlock(node, options) {
 */
 function repeat(character, count) {
  return Array(count + 1).join(character);
-}
-
-/**
- * Handle messages from service worker
- */
-async function handleMessages(message, sender) {
-  if (!message.target || message.target !== 'offscreen') {
-    return; // Not for this context
-  }
-
-  switch (message.type) {
-    case 'process-content':
-      await processContent(message);
-      break;
-    case 'download-markdown':
-      await downloadMarkdown(
-        message.markdown,
-        message.title,
-        message.tabId,
-        message.imageList,
-        message.mdClipsFolder
-      );
-      break;
-    case 'process-context-menu':
-      await processContextMenu(message);
-      break;
-    case 'copy-to-clipboard':
-      await copyToClipboard(message.text);
-      break;
-  }
 }
 
 /**

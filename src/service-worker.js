@@ -84,16 +84,20 @@ async function handleClipRequest(message, tabId) {
     // Chrome - use offscreen document
     await ensureOffscreenDocumentExists();
     
+    // Get options to pass to offscreen document
+    const options = await getOptions();
+    
     // Generate request ID to track this specific request
     const requestId = generateRequestId();
     
-    // Send to offscreen for processing
+    // Send to offscreen for processing with options included
     await browser.runtime.sendMessage({
       target: 'offscreen',
       type: 'process-content',
       requestId: requestId,
       data: message,
-      tabId: tabId
+      tabId: tabId,
+      options: options  // Pass options directly
     });
   } else {
     // Firefox - process directly (Firefox allows DOM access in service workers)
@@ -117,7 +121,8 @@ async function handleClipRequest(message, tabId) {
       markdown: markdown,
       article: article,
       imageList: imageList,
-      mdClipsFolder: mdClipsFolder
+      mdClipsFolder: mdClipsFolder,
+      options: await getOptions()
     });
   }
 }
@@ -141,7 +146,8 @@ async function handleMarkdownResult(message) {
     markdown: result.markdown,
     article: result.article,
     imageList: result.imageList,
-    mdClipsFolder: result.mdClipsFolder
+    mdClipsFolder: result.mdClipsFolder,
+    options: await getOptions()
   });
 }
 
@@ -161,7 +167,8 @@ async function handleDownloadRequest(message) {
       title: message.title,
       tabId: message.tab.id,
       imageList: message.imageList,
-      mdClipsFolder: message.mdClipsFolder
+      mdClipsFolder: message.mdClipsFolder,
+      options: await getOptions()
     });
   } else {
     // Firefox - handle download directly
@@ -349,7 +356,8 @@ async function downloadMarkdownFromContext(info, tab) {
       type: 'process-context-menu',
       action: 'download',
       info: info,
-      tabId: tab.id
+      tabId: tab.id,
+      options: await getOptions()
     });
   } else {
     // Firefox - process directly
@@ -376,56 +384,155 @@ async function copyMarkdownFromContext(info, tab) {
       type: 'process-context-menu',
       action: 'copy',
       info: info,
-      tabId: tab.id
+      tabId: tab.id,
+      options: await getOptions()
     });
   } else {
     try {
-    await ensureScripts(tab.id);
+      // Firefox - handle directly
+      const platformOS = navigator.platform;
+      var folderSeparator = "";
+      if(platformOS.indexOf("Win") === 0){
+        folderSeparator = "\\";
+      } else {
+        folderSeparator = "/";
+      }
 
-    const platformOS = navigator.platform;
-    var folderSeparator = "";
-    if(platformOS.indexOf("Win") === 0){
-      folderSeparator = "\\";
-    }else{
-      folderSeparator = "/";
-    }
-
-    if (info.menuItemId == "copy-markdown-link") {
-      const options = await getOptions();
-      options.frontmatter = options.backmatter = '';
-      const article = await getArticleFromContent(tab.id, false);
-      const { markdown } = turndown(`<a href="${info.linkUrl}">${info.linkText || info.selectionText}</a>`, { ...options, downloadImages: false }, article);
-      await browser.tabs.executeScript(tab.id, {code: `copyToClipboard(${JSON.stringify(markdown)})`});
-    }
-    else if (info.menuItemId == "copy-markdown-image") {
-      await browser.tabs.executeScript(tab.id, {code: `copyToClipboard("![](${info.srcUrl})")`});
-    }
-    else if(info.menuItemId == "copy-markdown-obsidian") {
-      const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-obsidian");
-      const title = article.title;
-      const options = await getOptions();
-      const obsidianVault = options.obsidianVault;
-      const obsidianFolder = await formatObsidianFolder(article);
-      const { markdown } = await convertArticleToMarkdown(article, downloadImages = false);
-      await browser.tabs.executeScript(tab.id, { code: `copyToClipboard(${JSON.stringify(markdown)})` });
-      await chrome.tabs.update({url: "obsidian://advanced-uri?vault=" + obsidianVault + "&clipboard=true&mode=new&filepath=" + obsidianFolder + generateValidFileName(title)});
-    }
-    else if(info.menuItemId == "copy-markdown-obsall") {
-      const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-obsall");
-      const title = article.title;
-      const options = await getOptions();
-      const obsidianVault = options.obsidianVault;
-      const obsidianFolder = await formatObsidianFolder(article);
-      const { markdown } = await convertArticleToMarkdown(article, downloadImages = false);
-      await browser.tabs.executeScript(tab.id, { code: `copyToClipboard(${JSON.stringify(markdown)})` });
-      await browser.tabs.update({url: "obsidian://advanced-uri?vault=" + obsidianVault + "&clipboard=true&mode=new&filepath=" + obsidianFolder + generateValidFileName(title)});
-    }
-    else {
-      const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-selection");
-      const { markdown } = await convertArticleToMarkdown(article, downloadImages = false);
-      await browser.tabs.executeScript(tab.id, { code: `copyToClipboard(${JSON.stringify(markdown)})` });
-    }
-  } catch (error) {
+      if (info.menuItemId == "copy-markdown-link") {
+        const options = await getOptions();
+        options.frontmatter = options.backmatter = '';
+        const article = await getArticleFromContent(tab.id, false);
+        const { markdown } = turndown(`<a href="${info.linkUrl}">${info.linkText || info.selectionText}</a>`, { ...options, downloadImages: false }, article);
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (markdownText) => {
+            if (typeof copyToClipboard === 'function') {
+              copyToClipboard(markdownText);
+            } else {
+              // Fallback clipboard implementation
+              const textarea = document.createElement('textarea');
+              textarea.value = markdownText;
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-999999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+            }
+          },
+          args: [markdown]
+        });
+      }
+      else if (info.menuItemId == "copy-markdown-image") {
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (imageUrl) => {
+            if (typeof copyToClipboard === 'function') {
+              copyToClipboard(`![](${imageUrl})`);
+            } else {
+              // Fallback clipboard implementation
+              const textarea = document.createElement('textarea');
+              textarea.value = `![](${imageUrl})`;
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-999999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+            }
+          },
+          args: [info.srcUrl]
+        });
+      }
+      else if(info.menuItemId == "copy-markdown-obsidian") {
+        const article = await getArticleFromContent(tab.id, true);
+        const title = article.title;
+        const options = await getOptions();
+        const obsidianVault = options.obsidianVault;
+        const obsidianFolder = await formatObsidianFolder(article);
+        const { markdown } = await convertArticleToMarkdown(article, false);
+        
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (markdownText) => {
+            if (typeof copyToClipboard === 'function') {
+              copyToClipboard(markdownText);
+            } else {
+              // Fallback clipboard implementation
+              const textarea = document.createElement('textarea');
+              textarea.value = markdownText;
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-999999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+            }
+          },
+          args: [markdown]
+        });
+        
+        await browser.tabs.update({
+          url: `obsidian://advanced-uri?vault=${encodeURIComponent(obsidianVault)}&clipboard=true&mode=new&filepath=${encodeURIComponent(obsidianFolder + generateValidFileName(title))}`
+        });
+      }
+      else if(info.menuItemId == "copy-markdown-obsall") {
+        const article = await getArticleFromContent(tab.id, false);
+        const title = article.title;
+        const options = await getOptions();
+        const obsidianVault = options.obsidianVault;
+        const obsidianFolder = await formatObsidianFolder(article);
+        const { markdown } = await convertArticleToMarkdown(article, false);
+        
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (markdownText) => {
+            if (typeof copyToClipboard === 'function') {
+              copyToClipboard(markdownText);
+            } else {
+              // Fallback clipboard implementation
+              const textarea = document.createElement('textarea');
+              textarea.value = markdownText;
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-999999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+            }
+          },
+          args: [markdown]
+        });
+        
+        await browser.tabs.update({
+          url: `obsidian://advanced-uri?vault=${encodeURIComponent(obsidianVault)}&clipboard=true&mode=new&filepath=${encodeURIComponent(obsidianFolder + generateValidFileName(title))}`
+        });
+      }
+      else {
+        const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-selection");
+        const { markdown } = await convertArticleToMarkdown(article, false);
+        
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (markdownText) => {
+            if (typeof copyToClipboard === 'function') {
+              copyToClipboard(markdownText);
+            } else {
+              // Fallback clipboard implementation
+              const textarea = document.createElement('textarea');
+              textarea.value = markdownText;
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-999999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+            }
+          },
+          args: [markdown]
+        });
+      }
+    } catch (error) {
       console.error("Failed to copy text:", error);
     }
   }
@@ -446,7 +553,8 @@ async function copyTabAsMarkdownLink(tab) {
       await browser.runtime.sendMessage({
         target: 'offscreen',
         type: 'copy-to-clipboard',
-        text: `[${title}](${article.baseURI})`
+        text: `[${title}](${article.baseURI})`,
+        options: await getOptions()
       });
     } else {
       // Firefox - use content script
@@ -504,7 +612,8 @@ async function copyTabAsMarkdownLinkAll(tab) {
       await browser.runtime.sendMessage({
         target: 'offscreen',
         type: 'copy-to-clipboard',
-        text: markdown
+        text: markdown,
+        options: await getOptions()
       });
     } else {
       // Firefox - use content script
@@ -563,7 +672,8 @@ async function copySelectedTabAsMarkdownLink(tab) {
       await browser.runtime.sendMessage({
         target: 'offscreen',
         type: 'copy-to-clipboard',
-        text: markdown
+        text: markdown,
+        options: await getOptions()
       });
     } else {
       // Firefox - use content script
@@ -641,7 +751,8 @@ async function getArticleFromContent(tabId, selection = false) {
         type: 'get-article-content',
         tabId: tabId,
         selection: selection,
-        requestId: requestId
+        requestId: requestId,
+        options: await getOptions()
       });
       
       return await resultPromise;
@@ -700,7 +811,8 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
       title: title,
       tabId: tabId,
       imageList: imageList,
-      mdClipsFolder: mdClipsFolder
+      mdClipsFolder: mdClipsFolder,
+      options: await getOptions()
     });
   } 
   else if (options.downloadMode === 'downloadsApi' && browser.downloads) {
