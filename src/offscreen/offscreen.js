@@ -233,6 +233,36 @@ async function convertArticleToMarkdown(article, downloadImages = null, provided
   return result;
 }
 
+function processCodeBlock(node) {
+  // Get the raw text content first
+  let code = node.textContent;
+  
+  // Clean up any unnecessary whitespace
+  code = code.trim();
+  
+  // Try to detect language
+  let language = '';
+  
+  // Check for explicit language class
+  const languageMatch = node.className.match(/language-(\w+)/);
+  if (languageMatch) {
+    language = languageMatch[1];
+  } else {
+    // Use highlight.js for auto-detection
+    try {
+      const result = hljs.highlightAuto(code);
+      language = result.language || '';
+    } catch (e) {
+      console.warn('Language detection failed:', e);
+    }
+  }
+  
+  return {
+    code: code,
+    language: language
+  };
+}
+
 /**
  * Turndown HTML to Markdown conversion
  */
@@ -570,10 +600,26 @@ function turndown(content, options, article) {
         node.nodeName === 'PRE' &&
         node.firstChild &&
         node.firstChild.nodeName === 'CODE'
-      );
+      )
     },
     replacement: function (content, node, options) {
-      return convertToFencedCodeBlock(node.firstChild, options);
+      const codeNode = node.firstChild;
+      const processedCode = processCodeBlock(codeNode);
+      
+      const fenceChar = options.fence.charAt(0);
+      const fenceSize = 3;
+      const fence = repeat(fenceChar, fenceSize);
+      
+      return (
+        '\n\n' + 
+        fence + 
+        processedCode.language + 
+        '\n' + 
+        processedCode.code +
+        '\n' + 
+        fence + 
+        '\n\n'
+      )
     }
   });
 
@@ -599,9 +645,19 @@ function turndown(content, options, article) {
 * Get article from DOM string
 */
 async function getArticleFromDom(domString) {
- // Parse the DOM
- const parser = new DOMParser();
- const dom = parser.parseFromString(domString, "text/html");
+  const parser = new DOMParser();
+  const dom = parser.parseFromString(domString, "text/html");
+  
+  // Process code blocks before Readability
+  dom.querySelectorAll('pre code').forEach(codeBlock => {
+    const processed = processCodeBlock(codeBlock);
+    // Replace content with clean version
+    codeBlock.textContent = processed.code;
+    // Add language class if detected
+    if (processed.language) {
+      codeBlock.className = `language-${processed.language}`;
+    }
+  });
 
  if (dom.documentElement.nodeName == "parsererror") {
    console.error("Error while parsing DOM");
