@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>MarkSnip Test Runner</title>
+    <style>
+        .pass { color: green; }
+        .fail { color: red; }
+        .test-result { margin: 1em 0; padding: 1em; border: 1px solid #ccc; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h1>MarkSnip Test Runner</h1>
+    <div id="results"></div>
+
+    <!-- Load core libraries -->
+    <script src="../src/background/turndown.js"></script>
+    <script src="../src/background/turndown-plugin-gfm.js"></script>
+    <script src="../src/background/Readability.js"></script>
+    <script src="../src/shared/default-options.js"></script>
+
+    <script>
+        // Check if libraries loaded
+        console.log('TurndownService available:', typeof TurndownService !== 'undefined');
+        console.log('turndownPluginGfm available:', typeof turndownPluginGfm !== 'undefined');
+        console.log('Readability available:', typeof Readability !== 'undefined');
+        console.log('defaultOptions available:', typeof defaultOptions !== 'undefined');
+
+        // Test framework
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message);
+            }
+        }
+
+        function assertEquals(expected, actual, message) {
+            // Log exact string representations to see invisible characters
+            console.log('Expected string:', JSON.stringify(expected));
+            console.log('Actual string:', JSON.stringify(actual));
+            console.log('Comparing strings:', {
+                expected: expected,
+                actual: actual,
+                equal: expected === actual,
+                expectedLength: expected.length,
+                actualLength: actual.length
+            });
+            assert(expected === actual, `${message}\nExpected:\n${expected}\nActual:\n${actual}`);
+        }
+
+        function displayResult(testName, passed, error) {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'test-result';
+            resultDiv.innerHTML = `
+                <h3 class="${passed ? 'pass' : 'fail'}">${testName}: ${passed ? 'PASSED' : 'FAILED'}</h3>
+                ${error ? `<pre>${error}</pre>` : ''}
+            `;
+            document.getElementById('results').appendChild(resultDiv);
+        }
+
+        // Test cases
+        async function runTests() {
+            try {
+                // Load test page content
+                console.log('Attempting to fetch test page...');
+                const testPageUrl = new URL('test-page.html', window.location.href).href;
+                console.log('Full test page URL:', testPageUrl);
+                
+                const response = await fetch(testPageUrl, {
+                    cache: 'no-store' // Disable caching
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}, URL: ${testPageUrl}`);
+                }
+                
+                const html = await response.text();
+                console.log('Test page HTML:', html);
+
+                // Create DOM parser
+                console.log('Parsing HTML...');
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // Test 1: Basic text conversion
+                try {
+                    const basicTextSection = doc.getElementById('basic-formatting');
+                    if (!basicTextSection) {
+                        throw new Error('Could not find basic-formatting section');
+                    }
+
+                    console.log('Basic formatting section found:', basicTextSection.outerHTML);
+
+                    const turndownService = new TurndownService({
+                        ...defaultOptions,
+                        emDelimiter: '_',
+                        strongDelimiter: '**'
+                    });
+                    
+                    // Configure strikethrough with double tildes
+                    turndownService.addRule('strikethrough', {
+                        filter: ['del', 's', 'strike'],
+                        replacement: function (content) {
+                            return '~~' + content + '~~'
+                        }
+                    });
+
+                    const markdown = turndownService.turndown(basicTextSection.innerHTML).trim();
+                    console.log('Basic text markdown output:', markdown);
+
+                    // Construct expected string with exact formatting
+                    const expectedMarkdown = [
+                        '## Basic Formatting',
+                        '',
+                        'This section tests basic Markdown conversion for _italic_, **bold**, **_bold-italic_**, and underlined text.',
+                        '',
+                        'We also have ~~strikethrough~~ text and highlighted text.'
+                    ].join('\n').trim();
+
+                    assertEquals(
+                        expectedMarkdown,
+                        markdown,
+                        'Basic text conversion failed'
+                    );
+                    displayResult('Basic Text Test', true);
+                } catch (error) {
+                    displayResult('Basic Text Test', false, error.message);
+                }
+
+            } catch (error) {
+                console.error('Test execution failed:', error);
+                displayResult('Test Execution', false, `Test execution failed: ${error.message}\n${error.stack}`);
+            }
+        }
+
+        // Run tests when page loads
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>
