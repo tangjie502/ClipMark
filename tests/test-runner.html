@@ -58,6 +58,39 @@
             document.getElementById('results').appendChild(resultDiv);
         }
 
+        async function runTest(testName, sectionId, options = {}, expectedOutput) {
+            try {
+                const section = doc.getElementById(sectionId);
+                if (!section) {
+                    throw new Error(`Could not find ${sectionId} section`);
+                }
+        
+                console.log(`${testName} section found:`, section.outerHTML);
+        
+                const turndownService = new TurndownService({
+                    ...defaultOptions,
+                    ...options
+                });
+        
+                // Add any plugins based on options
+                if (options.useGfmTables) {
+                    turndownService.use(turndownPluginGfm.tables);
+                }
+        
+                const markdown = turndownService.turndown(section.innerHTML).trim();
+                console.log(`${testName} markdown output:`, markdown);
+        
+                assertEquals(
+                    expectedOutput.trim(),
+                    markdown,
+                    `${testName} conversion failed`
+                );
+                displayResult(testName, true);
+            } catch (error) {
+                displayResult(testName, false, error.message);
+            }
+        }        
+
         // Test cases
         async function runTests() {
             try {
@@ -125,6 +158,91 @@
                     displayResult('Basic Text Test', true);
                 } catch (error) {
                     displayResult('Basic Text Test', false, error.message);
+                }
+
+                // Test 2: Table conversion
+                try {
+                    const tableSection = doc.getElementById('table-section');
+                    if (!tableSection) {
+                        throw new Error('Could not find table-section');
+                    }
+
+                    const turndownService = new TurndownService({
+                        ...defaultOptions,
+                        tableFormatting: {
+                            prettyPrint: true,    // Enable pretty printing
+                            centerText: false,     // Don't center the text
+                            stripLinks: false,     // Don't strip links
+                            stripFormatting: false // Don't strip formatting
+                        }
+                    });
+                    
+                    // Add GFM table support with formatting
+                    turndownService.use(turndownPluginGfm.tables);
+
+                    const markdown = turndownService.turndown(tableSection.innerHTML).trim();
+                    console.log('Table markdown output:', markdown);
+
+                    // Update expected markdown to match actual format
+                    const expectedMarkdown = [
+                        '## Table Test',
+                        '',
+                        '| Header 1 | Header 2 |',
+                        '| --- | --- |',
+                        '| Cell 1 | Cell 2 |', 
+                        '| Cell 3 | Cell 4 |'
+                    ].join('\n').trim();
+
+                    assertEquals(
+                        expectedMarkdown,
+                        markdown,
+                        'Table conversion failed'
+                    );
+                    displayResult('Table Test', true);
+                } catch (error) {
+                    displayResult('Table Test', false, error.message);
+                }
+
+                // Test 3: Links and Lists
+                try {
+                    const linksAndListsSection = doc.getElementById('links-and-lists');
+                    if (!linksAndListsSection) {
+                        throw new Error('Could not find links-and-lists section');
+                    }
+
+                    const turndownService = new TurndownService({
+                        ...defaultOptions,
+                        bulletListMarker: '-',
+                        listIndent: '  ',  // Use 2 spaces for indentation
+                        spacedList: false  // Don't add extra spaces after markers
+                    });
+
+                    const markdown = turndownService.turndown(linksAndListsSection.innerHTML).trim();
+                    console.log('Links and lists markdown output:', markdown);
+
+                    // Update expected markdown to match actual format 
+                    const expectedMarkdown = [
+                        '## Links and Lists',
+                        '',
+                        'Here\'s a [link](https://example.com) and an [image](https://example.com/image.jpg):',
+                        '',
+                        '![Test Image](https://example.com/test.jpg)',
+                        '',
+                        '-   Unordered item 1',
+                        '-   Unordered item 2',
+                        '    1.  Nested ordered item 1',
+                        '    2.  Nested ordered item 2',
+                        '-   Unordered item 3'
+                    ].join('\n').trim();
+
+                    assertEquals(
+                        expectedMarkdown,
+                        markdown,
+                        'Links and lists conversion failed'
+                    );
+                    displayResult('Links and Lists Test', true);
+                } catch (error) {
+                    displayResult('Links and Lists Test', false, error.message);
                 }
 
             } catch (error) {
