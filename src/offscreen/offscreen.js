@@ -56,8 +56,8 @@ async function processContent(message) {
   try {
     const { data, requestId, tabId, options } = message;
     
-    // Get article from DOM
-    const article = await getArticleFromDom(data.dom);
+    // Pass options to getArticleFromDom
+    const article = await getArticleFromDom(data.dom, options);
     
     // Handle selection if provided
     if (data.selection && data.clipSelection) {
@@ -233,22 +233,23 @@ async function convertArticleToMarkdown(article, downloadImages = null, provided
   return result;
 }
 
-function processCodeBlock(node) {
-  // Get the raw text content first
-  let code = node.textContent;
+function processCodeBlock(node, options) {
+  // If preserveCodeFormatting is enabled, return original HTML content
+  if (options.preserveCodeFormatting) {
+    return {
+      code: node.innerHTML,
+      language: getCodeLanguage(node)
+    };
+  }
+
+  // Get the raw text content
+  let code = node.textContent.trim();
   
-  // Clean up any unnecessary whitespace
-  code = code.trim();
+  // Detect language
+  let language = getCodeLanguage(node);
   
-  // Try to detect language
-  let language = '';
-  
-  // Check for explicit language class
-  const languageMatch = node.className.match(/language-(\w+)/);
-  if (languageMatch) {
-    language = languageMatch[1];
-  } else {
-    // Use highlight.js for auto-detection
+  // If no language detected and auto-detection is needed
+  if (!language) {
     try {
       const result = hljs.highlightAuto(code);
       language = result.language || '';
@@ -261,6 +262,22 @@ function processCodeBlock(node) {
     code: code,
     language: language
   };
+}
+
+function getCodeLanguage(node) {
+  // Check for explicit language class
+  const languageMatch = node.className.match(/language-(\w+)/);
+  if (languageMatch) {
+    return languageMatch[1];
+  }
+  
+  // Check for highlight.js classes
+  const hljsMatch = node.className.match(/hljs\s+(\w+)/);
+  if (hljsMatch) {
+    return hljsMatch[1];
+  }
+  
+  return '';
 }
 
 /**
@@ -604,7 +621,7 @@ function turndown(content, options, article) {
     },
     replacement: function (content, node, options) {
       const codeNode = node.firstChild;
-      const processedCode = processCodeBlock(codeNode);
+      const processedCode = processCodeBlock(codeNode, options);
       
       const fenceChar = options.fence.charAt(0);
       const fenceSize = 3;
@@ -644,20 +661,22 @@ function turndown(content, options, article) {
 /**
 * Get article from DOM string
 */
-async function getArticleFromDom(domString) {
+async function getArticleFromDom(domString, options) {
   const parser = new DOMParser();
   const dom = parser.parseFromString(domString, "text/html");
   
-  // Process code blocks before Readability
-  dom.querySelectorAll('pre code').forEach(codeBlock => {
-    const processed = processCodeBlock(codeBlock);
-    // Replace content with clean version
-    codeBlock.textContent = processed.code;
-    // Add language class if detected
-    if (processed.language) {
-      codeBlock.className = `language-${processed.language}`;
-    }
-  });
+  // Now options is defined
+  if (!options.preserveCodeFormatting) {
+    dom.querySelectorAll('pre code').forEach(codeBlock => {
+      const processed = processCodeBlock(codeBlock, options);
+      // Replace content with clean version
+      codeBlock.textContent = processed.code;
+      // Add language class if detected
+      if (processed.language) {
+        codeBlock.className = `language-${processed.language}`;
+      }
+    });
+  }
 
  if (dom.documentElement.nodeName == "parsererror") {
    console.error("Error while parsing DOM");

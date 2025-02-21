@@ -21,6 +21,8 @@ const saveOptions = e => {
         obsidianVault: document.querySelector("[name='obsidianVault']").value,
         obsidianFolder: document.querySelector("[name='obsidianFolder']").value,
 
+        preserveCodeFormatting: document.querySelector("[name='preserveCodeFormatting']").checked,
+
         // Add table formatting options
         tableFormatting: {
             stripLinks: document.querySelector("[name='tableFormatting.stripLinks']").checked,
@@ -115,6 +117,8 @@ const setCurrentChoice = result => {
         options.imageStyle = 'originalSource';
     }
 
+    options.preserveCodeFormatting = result.preserveCodeFormatting;
+
     // Initialize tableFormatting with default values if it doesn't exist
     options.tableFormatting = {
         stripLinks: false, // Default to false
@@ -141,7 +145,10 @@ const setCurrentChoice = result => {
     document.querySelector("[name='obsidianVault']").value = options.obsidianVault;
     document.querySelector("[name='obsidianFolder']").value = options.obsidianFolder;
 
-    // Set table formatting checkboxes explicitly with Boolean conversion
+    // Set preserveCodeFormatting checkbox
+    document.querySelector("[name='preserveCodeFormatting']").checked = options.preserveCodeFormatting;
+
+    // Set table formatting checkboxes
     document.querySelector("[name='tableFormatting.stripLinks']").checked = Boolean(options.tableFormatting.stripLinks);
     document.querySelector("[name='tableFormatting.stripFormatting']").checked = Boolean(options.tableFormatting.stripFormatting);
     document.querySelector("[name='tableFormatting.prettyPrint']").checked = Boolean(options.tableFormatting.prettyPrint);

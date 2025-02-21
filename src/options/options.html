@@ -230,6 +230,18 @@ const helloWorld = () => {
         </label>
     </div>
 
+    <div class="checkbox-container" id="preserveCodeFormatting-container">
+        <input name="preserveCodeFormatting" id="preserveCodeFormatting" type="checkbox" />
+        <label for="preserveCodeFormatting">Preserve Code Block HTML Formatting
+          <p><small>
+            When enabled, preserves original HTML formatting within code blocks.
+            This can be useful for maintaining exact visual formatting, but may make
+            the Markdown harder to read and use in other tools.
+            When disabled (default), produces clean code blocks.
+          </small></p>
+        </label>
+      </div>
+
     <div class="radio-container" id="fence">
         <h3>Code Block Fence</h3>
         <input type="radio" name="fence" id="```" value="```" />

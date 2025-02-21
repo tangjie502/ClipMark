@@ -5,6 +5,7 @@ const defaultOptions = {
   bulletListMarker: "-",
   codeBlockStyle: "fenced",
   fence: "```",
+  preserveCodeFormatting: false,
   emDelimiter: "_",
   strongDelimiter: "**",
   linkStyle: "inlined",
