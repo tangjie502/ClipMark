@@ -19,7 +19,34 @@ function initOffscreen() {
  * Handle messages from service worker
  */
 async function handleMessages(message, sender) {
+  // Handle messages that aren't specifically targeted at offscreen
   if (!message.target || message.target !== 'offscreen') {
+    if (message.type === 'article-dom-data') {
+      try {
+        // Process the DOM into an article
+        const article = await getArticleFromDom(message.dom, defaultOptions);
+        
+        // If selection was provided, replace content
+        if (message.selection) {
+          article.content = message.selection;
+        }
+        
+        // Send the article back to service worker
+        await browser.runtime.sendMessage({
+          type: 'article-result',
+          requestId: message.requestId,
+          article: article
+        });
+      } catch (error) {
+        console.error('Error processing article DOM:', error);
+        await browser.runtime.sendMessage({
+          type: 'article-result',
+          requestId: message.requestId,
+          error: error.message
+        });
+      }
+      return;
+    }
     return; // Not for this context
   }
 
@@ -162,7 +189,7 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     // Don't call getOptions() - use the passed options
     const localOptions = {...options};
     localOptions.frontmatter = localOptions.backmatter = '';
-    const article = await getArticleFromContent(tabId, false);
+    const article = await getArticleFromContent(tabId, false, options);  // Added options
     const { markdown } = turndown(
       `<a href="${info.linkUrl}">${info.linkText || info.selectionText}</a>`,
       { ...localOptions, downloadImages: false },
@@ -175,7 +202,7 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     await executeScriptInTab(tabId, `copyToClipboard("![](${info.srcUrl})")`);
   }
   else if (info.menuItemId === "copy-markdown-obsidian") {
-    const article = await getArticleFromContent(tabId, true);
+    const article = await getArticleFromContent(tabId, true, options);  // Added options
     const title = article.title;
     // Don't call getOptions()
     const obsidianVault = options.obsidianVault;
@@ -188,7 +215,7 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     });
   }
   else if (info.menuItemId === "copy-markdown-obsall") {
-    const article = await getArticleFromContent(tabId, false);
+    const article = await getArticleFromContent(tabId, false, options);  // Added options
     const title = article.title;
     // Don't call getOptions()
     const obsidianVault = options.obsidianVault;
@@ -201,7 +228,7 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     });
   }
   else {
-    const article = await getArticleFromContent(tabId, info.menuItemId === "copy-markdown-selection");
+    const article = await getArticleFromContent(tabId, info.menuItemId === "copy-markdown-selection", options);  // Added options
     const { markdown } = await convertArticleToMarkdown(article, false, options);
     await copyToClipboard(markdown);
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);

@@ -367,22 +367,23 @@ async function handleContextMenuClick(info, tab) {
   if (info.menuItemId.startsWith("copy-markdown")) {
     await copyMarkdownFromContext(info, tab);
   }
-  else if (info.menuItemId == "download-markdown-alltabs" || info.menuItemId == "tab-download-markdown-alltabs") {
+  else if (info.menuItemId === "download-markdown-alltabs" || info.menuItemId === "tab-download-markdown-alltabs") {
     await downloadMarkdownForAllTabs(info);
   }
   // One of the download commands
   else if (info.menuItemId.startsWith("download-markdown")) {
     await downloadMarkdownFromContext(info, tab);
   }
-  // Copy tab as markdown link
-  else if (info.menuItemId.startsWith("copy-tab-as-markdown-link-all")) {
+  // Copy all tabs as markdown links
+  else if (info.menuItemId === "copy-tab-as-markdown-link-all") {
     await copyTabAsMarkdownLinkAll(tab);
   }
-  // Copy only selected tab as markdown link
-  else if (info.menuItemId.startsWith("copy-tab-as-markdown-link-selected")) {
+  // Copy only selected tabs as markdown links
+  else if (info.menuItemId === "copy-tab-as-markdown-link-selected") {
     await copySelectedTabAsMarkdownLink(tab);
   }
-  else if (info.menuItemId.startsWith("copy-tab-as-markdown-link")) {
+  // Copy single tab as markdown link
+  else if (info.menuItemId === "copy-tab-as-markdown-link") {
     await copyTabAsMarkdownLink(tab);
   }
   // A settings toggle command
@@ -457,6 +458,86 @@ async function toggleSetting(setting, options = null) {
       } catch { }
     }
   }
+}
+
+/**
+* Replace placeholder strings with article info
+*/
+function textReplace(string, article, disallowedChars = null) {
+  // Replace values from article object
+  for (const key in article) {
+    if (article.hasOwnProperty(key) && key != "content") {
+      let s = (article[key] || '') + '';
+      if (s && disallowedChars) s = generateValidFileName(s, disallowedChars);
+
+      string = string.replace(new RegExp('{' + key + '}', 'g'), s)
+        .replace(new RegExp('{' + key + ':kebab}', 'g'), s.replace(/ /g, '-').toLowerCase())
+        .replace(new RegExp('{' + key + ':snake}', 'g'), s.replace(/ /g, '_').toLowerCase())
+        .replace(new RegExp('{' + key + ':camel}', 'g'), s.replace(/ ./g, (str) => str.trim().toUpperCase()).replace(/^./, (str) => str.toLowerCase()))
+        .replace(new RegExp('{' + key + ':pascal}', 'g'), s.replace(/ ./g, (str) => str.trim().toUpperCase()).replace(/^./, (str) => str.toUpperCase()));
+    }
+  }
+
+  // Replace date formats
+  const now = new Date();
+  const dateRegex = /{date:(.+?)}/g;
+  const matches = string.match(dateRegex);
+  if (matches && matches.forEach) {
+    matches.forEach(match => {
+      const format = match.substring(6, match.length - 1);
+      const dateString = moment(now).format(format);
+      string = string.replaceAll(match, dateString);
+    });
+  }
+
+  // Replace keywords
+  const keywordRegex = /{keywords:?(.*)?}/g;
+  const keywordMatches = string.match(keywordRegex);
+  if (keywordMatches && keywordMatches.forEach) {
+    keywordMatches.forEach(match => {
+      let seperator = match.substring(10, match.length - 1);
+      try {
+        seperator = JSON.parse(JSON.stringify(seperator).replace(/\\\\/g, '\\'));
+      }
+      catch { }
+      const keywordsString = (article.keywords || []).join(seperator);
+      string = string.replace(new RegExp(match.replace(/\\/g, '\\\\'), 'g'), keywordsString);
+    });
+  }
+
+  // Replace anything left in curly braces
+  const defaultRegex = /{(.*?)}/g;
+  string = string.replace(defaultRegex, '');
+
+  return string;
+}
+
+/**
+* Generate valid filename
+*/
+function generateValidFileName(title, disallowedChars = null) {
+  if (!title) return title;
+  else title = title + '';
+  // Remove < > : " / \ | ? * 
+  var illegalRe = /[\/\?<>\\:\*\|":]/g;
+  // And non-breaking spaces
+  var name = title.replace(illegalRe, "").replace(new RegExp('\u00A0', 'g'), ' ');
+  
+  if (disallowedChars) {
+    for (let c of disallowedChars) {
+      if (`[\\^$.|?*+()`.includes(c)) c = `\\${c}`;
+      name = name.replace(new RegExp(c, 'g'), '');
+    }
+  }
+  
+  return name;
+}
+
+async function formatTitle(article, providedOptions = null) {
+  const options = providedOptions || defaultOptions;
+  let title = textReplace(options.title, article, options.disallowedChars + '/');
+  title = title.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
+  return title;
 }
 
 /**
@@ -732,29 +813,27 @@ async function copyMarkdownFromContext(info, tab) {
 async function copyTabAsMarkdownLink(tab) {
   try {
     await ensureScripts(tab.id);
-    const article = await getArticleFromContent(tab.id);
-    const title = await formatTitle(article);
+    const options = await getOptions();  // Get options first
+    const article = await getArticleFromContent(tab.id, false, options);
+    const title = await formatTitle(article, options);
     
     if (typeof chrome !== 'undefined' && chrome.offscreen) {
-      // Chrome - use offscreen document for clipboard operations
       await ensureOffscreenDocumentExists();
       await browser.runtime.sendMessage({
         target: 'offscreen',
         type: 'copy-to-clipboard',
         text: `[${title}](${article.baseURI})`,
-        options: await getOptions()
+        options: options
       });
     } else {
-      // Firefox - use content script
       await browser.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (linkText) => {
+        func: (text) => {
           if (typeof copyToClipboard === 'function') {
-            copyToClipboard(linkText);
+            copyToClipboard(text);
           } else {
-            // Fallback clipboard method
             const textarea = document.createElement('textarea');
-            textarea.value = linkText;
+            textarea.value = text;
             textarea.style.position = 'fixed';
             textarea.style.left = '-999999px';
             document.body.appendChild(textarea);
@@ -777,8 +856,6 @@ async function copyTabAsMarkdownLink(tab) {
 async function copyTabAsMarkdownLinkAll(tab) {
   try {
     const options = await getOptions();
-    options.frontmatter = options.backmatter = '';
-    
     const tabs = await browser.tabs.query({
       currentWindow: true
     });
@@ -786,34 +863,31 @@ async function copyTabAsMarkdownLinkAll(tab) {
     const links = [];
     for (const currentTab of tabs) {
       await ensureScripts(currentTab.id);
-      const article = await getArticleFromContent(currentTab.id);
-      const title = await formatTitle(article);
+      const article = await getArticleFromContent(currentTab.id, false, options);
+      const title = await formatTitle(article, options);
       const link = `${options.bulletListMarker} [${title}](${article.baseURI})`;
       links.push(link);
     }
     
-    const markdown = links.join(`\n`);
+    const markdown = links.join('\n');
     
     if (typeof chrome !== 'undefined' && chrome.offscreen) {
-      // Chrome - use offscreen document for clipboard operations
       await ensureOffscreenDocumentExists();
       await browser.runtime.sendMessage({
         target: 'offscreen',
         type: 'copy-to-clipboard',
         text: markdown,
-        options: await getOptions()
+        options: options
       });
     } else {
-      // Firefox - use content script
       await browser.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (markdownText) => {
+        func: (text) => {
           if (typeof copyToClipboard === 'function') {
-            copyToClipboard(markdownText);
+            copyToClipboard(text);
           } else {
-            // Fallback clipboard method
             const textarea = document.createElement('textarea');
-            textarea.value = markdownText;
+            textarea.value = text;
             textarea.style.position = 'fixed';
             textarea.style.left = '-999999px';
             document.body.appendChild(textarea);
@@ -906,11 +980,16 @@ async function downloadMarkdownForAllTabs(info) {
 /**
  * Get article from content of the tab
  */
-async function getArticleFromContent(tabId, selection = false) {
+async function getArticleFromContent(tabId, selection = false, options = null) {
   try {
     // For Chrome: orchestrate through offscreen document
     if (typeof chrome !== 'undefined' && chrome.offscreen) {
       await ensureOffscreenDocumentExists();
+      
+      // Get options if not provided
+      if (!options) {
+        options = await getOptions();
+      }
       
       // Generate a unique request ID
       const requestId = generateRequestId();
@@ -920,15 +999,19 @@ async function getArticleFromContent(tabId, selection = false) {
         const messageListener = (message) => {
           if (message.type === 'article-result' && message.requestId === requestId) {
             browser.runtime.onMessage.removeListener(messageListener);
-            resolve(message.article);
+            if (message.error) {
+              reject(new Error(message.error));
+            } else {
+              resolve(message.article);
+            }
           }
         };
         
-        // Set timeout to prevent hanging
+        // Set timeout
         setTimeout(() => {
           browser.runtime.onMessage.removeListener(messageListener);
           reject(new Error('Timeout getting article content'));
-        }, 30000); // 30 second timeout
+        }, 30000);
         
         browser.runtime.onMessage.addListener(messageListener);
       });
@@ -940,16 +1023,19 @@ async function getArticleFromContent(tabId, selection = false) {
         tabId: tabId,
         selection: selection,
         requestId: requestId,
-        options: await getOptions()
+        options: options
       });
       
-      return await resultPromise;
+      const article = await resultPromise;
+      if (!article) {
+        throw new Error('Failed to get article content');
+      }
+      return article;
     } 
     else {
       // For Firefox: direct execution
       await ensureScripts(tabId);
       
-      // Run the content script function to get the details
       const results = await browser.scripting.executeScript({
         target: { tabId: tabId },
         func: () => {
@@ -960,23 +1046,21 @@ async function getArticleFromContent(tabId, selection = false) {
         }
       });
       
-      // Make sure we got a valid result
-      if (results && results[0]?.result) {
-        const article = await getArticleFromDom(results[0].result.dom);
-        
-        // If we're to grab the selection, and we've selected something,
-        // replace the article content with the selection
-        if (selection && results[0].result.selection) {
-          article.content = results[0].result.selection;
-        }
-        
-        return article;
+      if (!results?.[0]?.result) {
+        throw new Error('Failed to get DOM content');
       }
-      return null;
+      
+      const article = await getArticleFromDom(results[0].result.dom, options);
+      
+      if (selection && results[0].result.selection) {
+        article.content = results[0].result.selection;
+      }
+      
+      return article;
     }
   } catch (error) {
     console.error("Error in getArticleFromContent:", error);
-    return null;
+    throw error; // Re-throw to handle in calling function
   }
 }
 
