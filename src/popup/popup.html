@@ -15,6 +15,7 @@
     
     <a href="#" class="button toggle" id="downloadImages"><i class="check"></i>Download Images</a>
     <a href="/options/options.html" id="options" target="_blank">open options</a>
+    <a href="#" id="batchProcess">batch</a>
     <div class="row" id="clipOption">
       <a href="#" class="button toggle" id="selected"><i class="check"></i>Selected Text</a>
       <a href="#" class="button toggle" id="document"><i class="check"></i>Entire Document</a>
@@ -25,6 +26,13 @@
     <a href="#" class="button" id="download">Download</a>
     <a href="#" class="button" id="downloadSelection">Download selected</a>
   </div>
+  <div id="batchContainer" style="display: none;">
+    <textarea id="urlList" placeholder="Enter URLs to convert (one per line)&#10;Example:&#10;https://example.com/page1&#10;https://example.com/page2"></textarea>
+    <div class="button-row">
+        <a href="#" class="button" id="convertUrls">Convert All</a>
+        <a href="#" class="button" id="cancelBatch">Cancel</a>
+    </div>
+</div>
   <div id="spinner"></div>
   <script type="application/javascript" src="../browser-polyfill.min.js"></script>
   <script type="application/javascript" src="lib/codemirror.js"></script>

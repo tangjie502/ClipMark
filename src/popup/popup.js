@@ -25,10 +25,141 @@ cm.on("cursorActivity", (cm) => {
 document.getElementById("download").addEventListener("click", download);
 document.getElementById("downloadSelection").addEventListener("click", downloadSelection);
 
+document.getElementById("batchProcess").addEventListener("click", showBatchProcess);
+document.getElementById("convertUrls").addEventListener("click", handleBatchConversion);
+document.getElementById("cancelBatch").addEventListener("click", hideBatchProcess);
+
+function showBatchProcess(e) {
+    e.preventDefault();
+    document.getElementById("container").style.display = 'none';
+    document.getElementById("batchContainer").style.display = 'block';
+}
+
+function hideBatchProcess(e) {
+    e.preventDefault();
+    document.getElementById("container").style.display = 'flex';
+    document.getElementById("batchContainer").style.display = 'none';
+}
+
 const defaultOptions = {
     includeTemplate: false,
     clipSelection: true,
     downloadImages: false
+}
+
+async function handleBatchConversion(e) {
+    e.preventDefault();
+    
+    const urlText = document.getElementById("urlList").value;
+    const urls = urlText.split('\n')
+        .map(url => url.trim())
+        .filter(url => url && url.startsWith('http'));
+    
+    if (urls.length === 0) {
+        showError("Please enter valid URLs (one per line)", false);
+        return;
+    }
+
+    document.getElementById("spinner").style.display = 'block';
+    document.getElementById("batchContainer").style.display = 'none';
+    
+    try {
+        const tabs = [];
+        console.log('Starting batch conversion...');
+        
+        // First create and load all tabs
+        for (const url of urls) {
+            console.log(`Creating tab for ${url}`);
+            const tab = await browser.tabs.create({ 
+                url: url, 
+                active: false 
+            });
+            tabs.push(tab);
+            
+            // Wait for tab load
+            await new Promise((resolve, reject) => {
+                function listener(tabId, info) {
+                    if (tabId === tab.id && info.status === 'complete') {
+                        browser.tabs.onUpdated.removeListener(listener);
+                        console.log(`Tab ${tabId} loaded`);
+                        resolve();
+                    }
+                }
+                browser.tabs.onUpdated.addListener(listener);
+            });
+
+            // Ensure scripts are injected
+            console.log(`Injecting scripts into tab ${tab.id}`);
+            await browser.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ["/browser-polyfill.min.js"]
+            });
+            await browser.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ["/contentScript/contentScript.js"]
+            });
+        }
+
+        // Process each tab
+        for (const tab of tabs) {
+            try {
+                console.log(`Processing tab ${tab.id}`);
+                
+                // Create a promise for the display.md message
+                const displayMdPromise = new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Timeout waiting for markdown generation'));
+                    }, 30000);
+
+                    function messageListener(message) {
+                        if (message.type === "display.md") {
+                            clearTimeout(timeout);
+                            browser.runtime.onMessage.removeListener(messageListener);
+                            console.log(`Received markdown for tab ${tab.id}`);
+                            
+                            // Update state
+                            cm.setValue(message.markdown);
+                            document.getElementById("title").value = message.article.title;
+                            imageList = message.imageList;
+                            mdClipsFolder = message.mdClipsFolder;
+                            
+                            resolve();
+                        }
+                    }
+                    
+                    browser.runtime.onMessage.addListener(messageListener);
+                });
+
+                // Start the clip process
+                console.log(`Starting clipSite for tab ${tab.id}`);
+                await clipSite(tab.id);
+                
+                // Wait for the display.md message
+                await displayMdPromise;
+
+                // Trigger download
+                console.log(`Triggering download for tab ${tab.id}`);
+                await sendDownloadMessage(cm.getValue());
+
+            } catch (error) {
+                console.error(`Error processing tab ${tab.id}:`, error);
+            }
+        }
+
+        // Clean up all tabs
+        console.log('Cleaning up tabs...');
+        await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
+
+        // All done
+        console.log('Batch conversion complete');
+        hideBatchProcess(e);
+        window.close();
+
+    } catch (error) {
+        console.error('Batch processing error:', error);
+        showError(`Error processing URLs: ${error.message}`, false);
+        document.getElementById("spinner").style.display = 'none';
+    }
 }
 
 const checkInitialSettings = options => {
@@ -274,10 +405,17 @@ function notify(message) {
     }
 }
 
-function showError(err) {
+function showError(err, useEditor = true) {
     // show the hidden elements
     document.getElementById("container").style.display = 'flex';
     document.getElementById("spinner").style.display = 'none';
-    cm.setValue(`Error clipping the page\n\n${err}`)
+    
+    if (useEditor) {
+        // Original behavior - show error in CodeMirror
+        cm.setValue(`Error clipping the page\n\n${err}`);
+    } else {
+        // Batch processing error - show in CodeMirror but don't disrupt UI
+        const currentContent = cm.getValue();
+        cm.setValue(`${currentContent}\n\nError: ${err}`);
+    }
 }
-
