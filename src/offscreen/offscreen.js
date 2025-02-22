@@ -113,13 +113,41 @@ async function processContextMenu(message) {
  * Handle context menu download action
  */
 async function handleContextMenuDownload(info, tabId, providedOptions = null) {
-  const options = providedOptions || defaultOptions;
-  
-  const article = await getArticleFromContent(tabId, info.menuItemId === "download-markdown-selection");
-  const title = await formatTitle(article, options);
-  const { markdown, imageList } = await convertArticleToMarkdown(article, null, options);
-  const mdClipsFolder = await formatMdClipsFolder(article, options);
-  await downloadMarkdown(markdown, title, tabId, imageList, mdClipsFolder, options);
+  console.log(`Starting download for tab ${tabId}`);
+  try {
+    const options = providedOptions || defaultOptions;
+    
+    const article = await getArticleFromContent(tabId, 
+      info.menuItemId === "download-markdown-selection",
+      options
+    );
+    if (!article?.content) {
+      throw new Error(`Failed to get valid article content from tab ${tabId}`);
+    }
+
+    console.log(`Got article for tab ${tabId}, processing...`);
+    const title = await formatTitle(article, options);
+    const { markdown, imageList } = await convertArticleToMarkdown(article, null, options);
+    const mdClipsFolder = await formatMdClipsFolder(article, options);
+    
+    console.log(`Downloading markdown for tab ${tabId}`);
+    await downloadMarkdown(markdown, title, tabId, imageList, mdClipsFolder, options);
+    
+    // Signal completion
+    await browser.runtime.sendMessage({
+      type: 'process-complete',
+      tabId: tabId,
+      success: true
+    });
+  } catch (error) {
+    console.error(`Error processing tab ${tabId}:`, error);
+    await browser.runtime.sendMessage({
+      type: 'process-complete',
+      tabId: tabId,
+      error: error.message
+    });
+    throw error;
+  }
 }
 
 /**
@@ -662,6 +690,10 @@ function turndown(content, options, article) {
 * Get article from DOM string
 */
 async function getArticleFromDom(domString, options) {
+  if (!domString) {
+    throw new Error('Invalid DOM string provided');
+  }
+  
   const parser = new DOMParser();
   const dom = parser.parseFromString(domString, "text/html");
   
@@ -800,30 +832,32 @@ async function getArticleFromDom(domString, options) {
 /**
 * Get article from tab content
 */
-async function getArticleFromContent(tabId, selection = false) {
+async function getArticleFromContent(tabId, selection = false, options = null) {  // Add options parameter
   try {
-    // Request the service worker to get content via messaging
+    console.log(`Getting article content for tab ${tabId}`);
     const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
     
-    // Create a promise that will be resolved when the response is received
     const resultPromise = new Promise((resolve, reject) => {
       const messageListener = (message) => {
         if (message.type === 'article-content-result' && message.requestId === requestId) {
+          console.log(`Received article content result for tab ${tabId}:`, message);
           browser.runtime.onMessage.removeListener(messageListener);
-          resolve(message.article);
+          if (message.error) {
+            reject(new Error(message.error));
+          } else {
+            resolve(message.article);
+          }
         }
       };
       
-      // Set timeout to prevent hanging
       setTimeout(() => {
         browser.runtime.onMessage.removeListener(messageListener);
-        reject(new Error('Timeout getting article content'));
+        reject(new Error(`Timeout getting article content for tab ${tabId}`));
       }, 30000);
       
       browser.runtime.onMessage.addListener(messageListener);
     });
     
-    // Send the request to service worker
     await browser.runtime.sendMessage({
       type: "get-tab-content",
       tabId: tabId,
@@ -831,10 +865,15 @@ async function getArticleFromContent(tabId, selection = false) {
       requestId: requestId
     });
     
-    // Wait for the result
-    return await resultPromise;
+    const article = await resultPromise;
+    if (!article?.dom) {
+      throw new Error(`Missing DOM content for tab ${tabId}`);
+    }
+    
+    console.log(`Processing DOM content for tab ${tabId}`);
+    return await getArticleFromDom(article.dom, options);  // Pass options here
   } catch (error) {
-    console.error("Error getting content from tab:", error);
+    console.error(`Error getting content from tab ${tabId}:`, error);
     return null;
   }
 }

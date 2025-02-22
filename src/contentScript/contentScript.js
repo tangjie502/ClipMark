@@ -97,11 +97,24 @@ function getHTMLOfSelection() {
 }
 
 function getSelectionAndDom() {
-    return {
-        selection: getHTMLOfSelection(),
-        dom: getHTMLOfDocument()
+    try {
+      const dom = getHTMLOfDocument();
+      const selection = getHTMLOfSelection();
+      
+      if (!dom) {
+        console.error('Failed to get document HTML');
+        return null;
+      }
+      
+      return {
+        selection: selection,
+        dom: dom
+      };
+    } catch (error) {
+      console.error('Error in getSelectionAndDom:', error);
+      return null;
     }
-}
+  }
 
 // This function must be called in a visible page, such as a browserAction popup
 // or a content script. Calling it in a background page has no effect!

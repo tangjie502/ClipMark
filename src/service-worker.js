@@ -89,6 +89,7 @@ async function executeScriptInTab(tabId, codeString) {
  */
 async function getTabContentForOffscreen(tabId, selection, requestId) {
   try {
+    console.log(`Getting tab content for ${tabId}`);
     await ensureScripts(tabId);
     
     const results = await browser.scripting.executeScript({
@@ -97,12 +98,15 @@ async function getTabContentForOffscreen(tabId, selection, requestId) {
         if (typeof getSelectionAndDom === 'function') {
           return getSelectionAndDom();
         }
+        console.warn('getSelectionAndDom not found');
         return null;
       }
     });
     
+    console.log(`Script execution results for tab ${tabId}:`, results);
+    
     if (results && results[0]?.result) {
-      // Forward the result to the offscreen document
+      console.log(`Sending content result for tab ${tabId}`);
       await browser.runtime.sendMessage({
         type: 'article-content-result',
         requestId: requestId,
@@ -112,12 +116,18 @@ async function getTabContentForOffscreen(tabId, selection, requestId) {
         }
       });
     } else {
-      throw new Error('Failed to get content from tab');
+      throw new Error(`Failed to get content from tab ${tabId} - getSelectionAndDom returned null`);
     }
   } catch (error) {
-    console.error("Error getting tab content:", error);
+    console.error(`Error getting tab content for ${tabId}:`, error);
+    await browser.runtime.sendMessage({
+      type: 'article-content-result',
+      requestId: requestId,
+      error: error.message
+    });
   }
 }
+
 
 /**
  * Forward get article content to offscreen document
@@ -454,23 +464,43 @@ async function toggleSetting(setting, options = null) {
  */
 async function ensureScripts(tabId) {
   try {
-    // Check if the content script is already loaded
-    const results = await browser.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        return typeof getSelectionAndDom === 'function';
-      }
-    });
-    
-    // If the function doesn't exist or the script check failed, inject the content script
-    if (!results || !results[0]?.result) {
-      await browser.scripting.executeScript({
-        target: { tabId: tabId },
-        files: ["/contentScript/contentScript.js"]
+      // First check if scripts are already loaded
+      const results = await browser.scripting.executeScript({
+          target: { tabId: tabId },
+          func: () => {
+              return typeof getSelectionAndDom === 'function' && typeof browser !== 'undefined';
+          }
       });
-    }
+      
+      // If either script is missing, inject both in correct order
+      if (!results || !results[0]?.result) {
+          await browser.scripting.executeScript({
+              target: { tabId: tabId },
+              files: [
+                  "/browser-polyfill.min.js",
+                  "/contentScript/contentScript.js"
+              ]
+          });
+      }
+
+      // Verify injection was successful
+      const verification = await browser.scripting.executeScript({
+          target: { tabId: tabId },
+          func: () => {
+              return {
+                  hasPolyfill: typeof browser !== 'undefined',
+                  hasContentScript: typeof getSelectionAndDom === 'function'
+              };
+          }
+      });
+
+      if (!verification[0]?.result?.hasPolyfill || !verification[0]?.result?.hasContentScript) {
+          throw new Error('Script injection verification failed');
+      }
+
   } catch (error) {
-    console.error("Failed to ensure scripts:", error);
+      console.error("Failed to ensure scripts:", error);
+      throw error; // Re-throw to handle in calling function
   }
 }
 
@@ -481,9 +511,31 @@ async function downloadMarkdownFromContext(info, tab) {
   await ensureScripts(tab.id);
   
   if (typeof chrome !== 'undefined' && chrome.offscreen) {
-    // Chrome - use offscreen document
     await ensureOffscreenDocumentExists();
     
+    // Create a promise to wait for completion
+    const processComplete = new Promise((resolve, reject) => {
+      const messageListener = (message) => {
+        if (message.type === 'process-complete' && message.tabId === tab.id) {
+          browser.runtime.onMessage.removeListener(messageListener);
+          if (message.error) {
+            reject(new Error(message.error));
+          } else {
+            resolve();
+          }
+        }
+      };
+      
+      browser.runtime.onMessage.addListener(messageListener);
+      
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        browser.runtime.onMessage.removeListener(messageListener);
+        reject(new Error(`Timeout processing tab ${tab.id}`));
+      }, 30000);
+    });
+    
+    // Send message to offscreen
     await browser.runtime.sendMessage({
       target: 'offscreen',
       type: 'process-context-menu',
@@ -492,6 +544,9 @@ async function downloadMarkdownFromContext(info, tab) {
       tabId: tab.id,
       options: await getOptions()
     });
+    
+    // Wait for completion
+    await processComplete;
   } else {
     // Firefox - process directly
     const article = await getArticleFromContent(tab.id, info.menuItemId == "download-markdown-selection");
