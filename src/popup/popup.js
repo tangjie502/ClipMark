@@ -4,6 +4,40 @@ var selectedText = null;
 var imageList = null;
 var mdClipsFolder = '';
 
+const progressUI = {
+    container: document.getElementById('progressContainer'),
+    bar: document.getElementById('progressBar'),
+    count: document.getElementById('progressCount'),
+    status: document.getElementById('progressStatus'),
+    currentUrl: document.getElementById('currentUrl'),
+    
+    show() {
+        this.container.style.display = 'flex';
+    },
+    
+    hide() {
+        this.container.style.display = 'none';
+    },
+    
+    reset() {
+        this.bar.style.width = '0%';
+        this.count.textContent = '0/0';
+        this.status.textContent = 'Processing URLs...';
+        this.currentUrl.textContent = '';
+    },
+    
+    updateProgress(current, total, url) {
+        const percentage = (current / total) * 100;
+        this.bar.style.width = `${percentage}%`;
+        this.count.textContent = `${current}/${total}`;
+        this.currentUrl.textContent = url;
+    },
+    
+    setStatus(status) {
+        this.status.textContent = status;
+    }
+};
+
 const darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
 // set up event handlers
 const cm = CodeMirror.fromTextArea(document.getElementById("md"), {
@@ -47,39 +81,115 @@ const defaultOptions = {
     downloadImages: false
 }
 
+// Function to parse markdown links
+function parseMarkdownLink(text) {
+    const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/;
+    const match = text.match(markdownLinkRegex);
+    if (match) {
+        return {
+            title: match[1].trim(),
+            url: match[2].trim()
+        };
+    }
+    return null;
+}
+
+// Function to validate and normalize URL
+function normalizeUrl(url) {
+    // Add https:// if no protocol specified
+    if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+    }
+    
+    try {
+        const urlObj = new URL(url);
+        return urlObj.href;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Function to process URLs from textarea
+function processUrlInput(text) {
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    const urlObjects = [];
+
+    for (const line of lines) {
+        // Try to parse as markdown link first
+        const mdLink = parseMarkdownLink(line);
+        
+        if (mdLink) {
+            const normalizedUrl = normalizeUrl(mdLink.url);
+            if (normalizedUrl) {
+                urlObjects.push({
+                    title: mdLink.title,
+                    url: normalizedUrl
+                });
+            }
+        } else if (line) {
+            // Try as regular URL
+            const normalizedUrl = normalizeUrl(line);
+            if (normalizedUrl) {
+                urlObjects.push({
+                    title: null, // Will be extracted from page
+                    url: normalizedUrl
+                });
+            }
+        }
+    }
+
+    return urlObjects;
+}
+
 async function handleBatchConversion(e) {
     e.preventDefault();
     
     const urlText = document.getElementById("urlList").value;
-    const urls = urlText.split('\n')
-        .map(url => url.trim())
-        .filter(url => url && url.startsWith('http'));
+    const urlObjects = processUrlInput(urlText);
     
-    if (urls.length === 0) {
-        showError("Please enter valid URLs (one per line)", false);
+    if (urlObjects.length === 0) {
+        showError("Please enter valid URLs or markdown links (one per line)", false);
         return;
     }
 
     document.getElementById("spinner").style.display = 'block';
-    document.getElementById("batchContainer").style.display = 'none';
+    document.getElementById("convertUrls").style.display = 'none';
+    progressUI.show();
+    progressUI.reset();
     
     try {
         const tabs = [];
+        const total = urlObjects.length;
+        let current = 0;
+        
         console.log('Starting batch conversion...');
         
-        // First create and load all tabs
-        for (const url of urls) {
-            console.log(`Creating tab for ${url}`);
+        // Create and load all tabs
+        for (const urlObj of urlObjects) {
+            current++;
+            progressUI.updateProgress(current, total, `Loading: ${urlObj.url}`);
+            
+            console.log(`Creating tab for ${urlObj.url}`);
             const tab = await browser.tabs.create({ 
-                url: url, 
+                url: urlObj.url, 
                 active: false 
             });
+            
+            if (urlObj.title) {
+                tab.customTitle = urlObj.title;
+            }
+            
             tabs.push(tab);
             
             // Wait for tab load
             await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error(`Timeout loading ${urlObj.url}`));
+                }, 30000);
+                
                 function listener(tabId, info) {
                     if (tabId === tab.id && info.status === 'complete') {
+                        clearTimeout(timeout);
                         browser.tabs.onUpdated.removeListener(listener);
                         console.log(`Tab ${tabId} loaded`);
                         resolve();
@@ -89,23 +199,23 @@ async function handleBatchConversion(e) {
             });
 
             // Ensure scripts are injected
-            console.log(`Injecting scripts into tab ${tab.id}`);
             await browser.scripting.executeScript({
                 target: { tabId: tab.id },
-                files: ["/browser-polyfill.min.js"]
-            });
-            await browser.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ["/contentScript/contentScript.js"]
+                files: ["/browser-polyfill.min.js", "/contentScript/contentScript.js"]
             });
         }
 
+        // Reset progress for processing phase
+        current = 0;
+        progressUI.setStatus('Converting pages to Markdown...');
+        
         // Process each tab
         for (const tab of tabs) {
             try {
+                current++;
+                progressUI.updateProgress(current, total, `Converting: ${tab.url}`);
                 console.log(`Processing tab ${tab.id}`);
                 
-                // Create a promise for the display.md message
                 const displayMdPromise = new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => {
                         reject(new Error('Timeout waiting for markdown generation'));
@@ -117,7 +227,10 @@ async function handleBatchConversion(e) {
                             browser.runtime.onMessage.removeListener(messageListener);
                             console.log(`Received markdown for tab ${tab.id}`);
                             
-                            // Update state
+                            if (tab.customTitle) {
+                                message.article.title = tab.customTitle;
+                            }
+                            
                             cm.setValue(message.markdown);
                             document.getElementById("title").value = message.article.title;
                             imageList = message.imageList;
@@ -130,35 +243,34 @@ async function handleBatchConversion(e) {
                     browser.runtime.onMessage.addListener(messageListener);
                 });
 
-                // Start the clip process
-                console.log(`Starting clipSite for tab ${tab.id}`);
                 await clipSite(tab.id);
-                
-                // Wait for the display.md message
                 await displayMdPromise;
-
-                // Trigger download
-                console.log(`Triggering download for tab ${tab.id}`);
                 await sendDownloadMessage(cm.getValue());
 
             } catch (error) {
                 console.error(`Error processing tab ${tab.id}:`, error);
+                progressUI.setStatus(`Error: ${error.message}`);
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Show error briefly
             }
         }
 
-        // Clean up all tabs
+        // Clean up tabs
+        progressUI.setStatus('Cleaning up...');
         console.log('Cleaning up tabs...');
         await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
 
-        // All done
+        progressUI.setStatus('Complete!');
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Show completion briefly
+        
         console.log('Batch conversion complete');
         hideBatchProcess(e);
         window.close();
 
     } catch (error) {
         console.error('Batch processing error:', error);
-        showError(`Error processing URLs: ${error.message}`, false);
+        progressUI.setStatus(`Error: ${error.message}`);
         document.getElementById("spinner").style.display = 'none';
+        document.getElementById("convertUrls").style.display = 'block';
     }
 }
 
