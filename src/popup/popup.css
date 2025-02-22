@@ -176,11 +176,12 @@ a.button {
     display: none;
     flex-direction: column;
     padding: 0.5em;
+    box-sizing: border-box;  /* Make padding included in height calc */
 }
 
 #urlList {
-    flex: 1;
-    min-height: 200px;
+    flex: 1;  /* Take up all available space */
+    width: 100%;  /* Full width */
     margin-bottom: 0.5em;
     padding: 0.5em;
     background: var(--bg);
@@ -189,12 +190,14 @@ a.button {
     resize: none;
     font-family: monospace;
     font-size: var(--font-size);
+    box-sizing: border-box;  /* Make padding included in width calc */
 }
 
 .button-row {
     display: flex;
     gap: 0.5em;
-    margin-top: auto; /* Push to bottom */
+    margin-top: auto;  /* Push to bottom */
+    width: 100%;  /* Full width */
 }
 
 .button-row .button {

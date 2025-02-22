@@ -66,7 +66,7 @@ document.getElementById("cancelBatch").addEventListener("click", hideBatchProces
 function showBatchProcess(e) {
     e.preventDefault();
     document.getElementById("container").style.display = 'none';
-    document.getElementById("batchContainer").style.display = 'block';
+    document.getElementById("batchContainer").style.display = 'flex';
 }
 
 function hideBatchProcess(e) {
