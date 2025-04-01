@@ -1,6 +1,6 @@
 # MarkSnip - Markdown Web Clipper
 
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/DhruvParikh1/markdownload-extension-updated?style=for-the-badge&sort=semver)](https://github.com/DhruvParikh1/markdownload-extension-updated/releases/latest)
+## [MarkSnip Chrome Extension Link](https://chromewebstore.google.com/detail/marksnip-markdown-web-cli/kcbaglhfgbkjdnpeokaamjjkddempipm?hl=en)
 
 MarkSnip is a powerful browser extension that helps you save web content in clean, formatted Markdown. Forked from the excellent [MarkDownload](https://github.com/deathau/markdownload/) extension, MarkSnip has been updated to Manifest V3 to comply with Chrome Extension Store requirements while adding enhanced features like improved table formatting, cleaner code blocks, and better overall readability.
 
