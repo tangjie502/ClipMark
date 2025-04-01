@@ -594,9 +594,11 @@ function turndown(content, options, article) {
       // get the href
       const href = validateUri(node.getAttribute('href'), article.baseURI);
       
-      // If we're in a table AND strip links is enabled, just return the text content
-      if (isInsideTable(node) && options.tableFormatting?.stripLinks === true) {
-        return content
+      // If we're in a table AND strip links is enabled, OR if linkStyle is set to stripLinks
+      // just return the text content without the link
+      if ((isInsideTable(node) && options.tableFormatting?.stripLinks === true) || 
+          options.linkStyle === "stripLinks") {
+        return content;
       }
       
       // Otherwise, convert to proper markdown link format
