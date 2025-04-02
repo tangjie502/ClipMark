@@ -47,17 +47,23 @@ const cm = CodeMirror.fromTextArea(document.getElementById("md"), {
 });
 cm.on("cursorActivity", (cm) => {
     const somethingSelected = cm.somethingSelected();
-    var a = document.getElementById("downloadSelection");
+    var downloadSelectionButton = document.getElementById("downloadSelection");
+    var copySelectionButton = document.getElementById("copySelection");
 
     if (somethingSelected) {
-        if(a.style.display != "block") a.style.display = "block";
+        if(downloadSelectionButton.style.display != "block") downloadSelectionButton.style.display = "block";
+        if(copySelectionButton.style.display != "block") copySelectionButton.style.display = "block";
     }
     else {
-        if(a.style.display != "none") a.style.display = "none";
+        if(downloadSelectionButton.style.display != "none") downloadSelectionButton.style.display = "none";
+        if(copySelectionButton.style.display != "none") copySelectionButton.style.display = "none";
     }
 });
 document.getElementById("download").addEventListener("click", download);
 document.getElementById("downloadSelection").addEventListener("click", downloadSelection);
+
+document.getElementById("copy").addEventListener("click", copyToClipboard);
+document.getElementById("copySelection").addEventListener("click", copySelectionToClipboard);
 
 document.getElementById("batchProcess").addEventListener("click", showBatchProcess);
 document.getElementById("convertUrls").addEventListener("click", handleBatchConversion);
@@ -494,6 +500,43 @@ async function downloadSelection(e) {
             console.error("Error sending selection download message:", error);
         }
     }
+}
+
+// Function to handle copying text to clipboard
+function copyToClipboard(e) {
+    e.preventDefault();
+    const text = cm.getValue();
+    navigator.clipboard.writeText(text).then(() => {
+        showCopySuccess();
+    }).catch(err => {
+        console.error("Error copying text: ", err);
+    });
+}
+
+function copySelectionToClipboard(e) {
+    e.preventDefault();
+    if (cm.somethingSelected()) {
+        const selectedText = cm.getSelection();
+        navigator.clipboard.writeText(selectedText).then(() => {
+            showCopySuccess();
+        }).catch(err => {
+            console.error("Error copying selection: ", err);
+        });
+    }
+}
+
+function showCopySuccess() {
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'copy-success';
+    statusDiv.textContent = 'Copied!';
+    document.body.appendChild(statusDiv);
+    
+    setTimeout(() => {
+        statusDiv.classList.add('fade-out');
+        setTimeout(() => {
+            document.body.removeChild(statusDiv);
+        }, 300);
+    }, 1000);
 }
 
 //function that handles messages from the injected script into the site

@@ -23,10 +23,17 @@
     <a href="#" class="button toggle" id="includeTemplate"><i class="check"></i>Include front/back template</a>
     <input type="text" id="title"></input>
     <textarea id="md"></textarea>
-    <a href="#" class="button" id="download">Download</a>
-    <a href="#" class="button" id="downloadSelection">Download selected</a>
+    <div class="button-row">
+        <a href="#" class="button" id="download">Download</a>
+        <a href="#" class="button" id="copy">Copy</a>
+    </div>
+    <div class="button-row">
+        <a href="#" class="button" id="downloadSelection">Download selected</a>
+        <a href="#" class="button" id="copySelection">Copy selected</a>
+    </div>
   </div>
   <div id="batchContainer" style="display: none;">
+    <h2 class="batch-title">Batch Processing</h2>
     <textarea id="urlList" placeholder="Enter URLs to convert (one per line)&#10;Example:&#10;https://example.com/page1&#10;https://example.com/page2"></textarea>
     <div class="button-row">
         <a href="#" class="button" id="convertUrls">Convert All</a>

@@ -179,6 +179,15 @@ a.button {
     box-sizing: border-box;  /* Make padding included in height calc */
 }
 
+.batch-title {
+    margin-top: 0;
+    margin-bottom: 0.75em;
+    font-size: 1.2em;
+    color: var(--fg);
+    text-align: center;
+    font-weight: 600;
+}
+
 #urlList {
     flex: 1;  /* Take up all available space */
     width: 100%;  /* Full width */
@@ -202,6 +211,25 @@ a.button {
 
 .button-row .button {
     flex: 1;
+}
+
+#downloadSelection, #copySelection {
+    display: none;
+}
+
+.copy-success {
+    margin-top: 0.2rem;
+    background-color: var(--primary);
+    color: var(--fg-primary);
+    padding: 8px 12px;
+    border-radius: 4px;
+    z-index: 1000;
+    opacity: 1;
+    transition: opacity 0.3s ease-out;
+}
+
+.fade-out {
+    opacity: 0;
 }
 
 #progressContainer {
@@ -257,7 +285,7 @@ a.button {
     text-align: center;
 }
 
-#downloadSelection {
+#downloadSelection #copySelection {
     background-color: var(--bg-primary);
     display: none;
 }
