@@ -358,64 +358,100 @@ function turndown(content, options, article) {
     filter: 'table',
     replacement: function(content, node) {
       try {
+        // Create a mini-turndown instance for cell content processing
+        const cellTurndownService = new TurndownService({
+          ...options,
+          headingStyle: options.headingStyle,
+          hr: options.hr,
+          bulletListMarker: options.bulletListMarker,
+          codeBlockStyle: options.codeBlockStyle,
+          fence: options.fence,
+          emDelimiter: options.emDelimiter,
+          strongDelimiter: options.strongDelimiter,
+          linkStyle: options.tableFormatting?.stripLinks ? 'stripLinks' : options.linkStyle,
+          linkReferenceStyle: options.linkReferenceStyle,
+          // Reset frontmatter/backmatter to avoid duplication
+          frontmatter: '',
+          backmatter: ''
+        });
+        
+        // Apply necessary plugins
+        cellTurndownService.use([
+          turndownPluginGfm.strikethrough,
+          turndownPluginGfm.taskListItems
+        ]);
+        
+        // Add custom rules for images, links, etc. to the cell turndown instance
+        if (options.tableFormatting?.stripLinks) {
+          cellTurndownService.addRule('links', {
+            filter: (node, tdopts) => {
+              return node.nodeName === 'A' && node.getAttribute('href');
+            },
+            replacement: (content, node, tdopts) => {
+              return content;
+            }
+          });
+        }
+        
+        // Process table structure
         const thead = node.querySelector('thead');
         const tbody = node.querySelector('tbody');
         const headerRow = thead?.querySelector('tr');
         const rows = headerRow ? 
-          [headerRow, ...tbody.children] :
-          [...tbody.children];
-      
+          [headerRow, ...(tbody ? Array.from(tbody.children) : [])] :
+          (tbody ? Array.from(tbody.children) : Array.from(node.querySelectorAll('tr')));
+        
         let tableMatrix = Array.from({ length: rows.length }, () => []);
         let columnWidths = [];
-      
+        
         // Process each row
         rows.forEach((row, rowIndex) => {
-          [...row.children].forEach(cell => {
-            // Get cell's content
-            let cellContent = '';
+          Array.from(row.children).forEach(cell => {
+            // Process cell content using the cell-specific turndown service
+            let processedContent = '';
             
-            // Create a new mini turndown instance for each cell
-            // This ensures links are processed the same way as the rest of the document
-            if (options.tableFormatting?.stripLinks) {
-              // Strip links
-              const tempDiv = document.createElement('div');
-              tempDiv.innerHTML = cell.innerHTML;
-              
-              const links = tempDiv.getElementsByTagName('a');
-              while (links.length) {
-                const link = links[0];
-                link.replaceWith(document.createTextNode(link.textContent.trim()));
-              }
-              cellContent = tempDiv.textContent.trim();
-            } else {
-              // Process with Turndown to maintain consistency with the rest of the document
-              // Create a clone of the current turndownService options but without frontmatter/backmatter
-              const cellOptions = { ...options };
-              cellOptions.frontmatter = '';
-              cellOptions.backmatter = '';
-              
-              // Use the main turndown instance to process the cell
-              const { markdown } = turndown(cell.innerHTML, cellOptions, article);
-              cellContent = markdown.trim();
+            // Create a container for the cell content
+            const cellContainer = document.createElement('div');
+            cellContainer.innerHTML = cell.innerHTML;
+            
+            // Apply formatting stripping if configured
+            if (options.tableFormatting?.stripFormatting) {
+              // Replace formatting elements with their text content
+              ['b', 'strong', 'i', 'em', 'u', 'mark', 'sub', 'sup'].forEach(tag => {
+                const elements = cellContainer.getElementsByTagName(tag);
+                // We need to convert to array because the collection changes as we modify
+                Array.from(elements).forEach(el => {
+                  el.replaceWith(document.createTextNode(el.textContent.trim()));
+                });
+              });
             }
             
-            cellContent = cellContent.replace(/\n/g, ' ');
-      
-            // Process colspan and rowspan
+            // Process the cell content through turndown
+            processedContent = cellTurndownService.turndown(cellContainer.innerHTML);
+            
+            // Handle rowspan and colspan (keeping original behavior)
             const colspan = parseInt(cell.getAttribute('colspan')) || 1;
             const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
-      
+            
+            // Add content to the matrix - keep existing behavior for rowspan/colspan
             for (let i = 0; i < rowspan; i++) {
               for (let j = 0; j < colspan; j++) {
                 const targetRow = rowIndex + i;
+                if (!tableMatrix[targetRow]) {
+                  tableMatrix[targetRow] = [];
+                }
                 const targetCol = tableMatrix[targetRow].length;
-                tableMatrix[targetRow][targetCol] = cellContent;
                 
-                // Calculate visible length (excluding markdown syntax)
-                const tempDiv = document.createElement('div');
-                tempDiv.textContent = cellContent.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Links
-                                             .replace(/[*_~`]+(.*?)[*_~`]+/g, '$1');   // Formatting
-                const visibleLength = tempDiv.textContent.length;
+                // Use the same content for all spanned cells (original behavior)
+                tableMatrix[targetRow][targetCol] = processedContent;
+                
+                // Calculate column width based on visible content
+                const simplifiedContent = processedContent
+                  .replace(/\n/g, ' ')
+                  .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Links
+                  .replace(/[*_~`]+(.*?)[*_~`]+/g, '$1');    // Formatting
+                
+                const visibleLength = simplifiedContent.length;
                 
                 if (!columnWidths[targetCol] || visibleLength > columnWidths[targetCol]) {
                   columnWidths[targetCol] = visibleLength;
@@ -424,9 +460,11 @@ function turndown(content, options, article) {
             }
           });
         });
-  
+        
+        // Build markdown table
         let markdown = '\n\n';
         
+        // Format cells with proper alignment and spacing
         const formatCell = (content, columnIndex) => {
           // Ensure content is a string
           const safeContent = content || '';
@@ -440,32 +478,43 @@ function turndown(content, options, article) {
             return ` ${safeContent} `;
           }
           
+          // For multi-line content, preserve structure but don't pad
+          if (safeContent.includes('\n')) {
+            return ` ${safeContent} `;
+          }
+          
           // Calculate visible length for centering - account for markdown syntax
-          const visibleText = safeContent.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Links
-                                         .replace(/[*_~`]+(.*?)[*_~`]+/g, '$1');    // Formatting
+          const visibleText = safeContent
+            .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Links
+            .replace(/[*_~`]+(.*?)[*_~`]+/g, '$1');    // Formatting
           const visibleLength = visibleText.length;
           
           const width = columnWidths[columnIndex] || 0;
-          const totalWidth = width + 2;
+          const totalWidth = width + 2; // Add 2 for standard padding
           
           if (!options.tableFormatting?.centerText) {
             return ` ${safeContent}${' '.repeat(Math.max(0, totalWidth - visibleLength - 1))}`;
           }
           
+          // Center content
           const leftSpace = ' '.repeat(Math.floor(Math.max(0, totalWidth - visibleLength) / 2));
           const rightSpace = ' '.repeat(Math.ceil(Math.max(0, totalWidth - visibleLength) / 2));
           return leftSpace + safeContent + rightSpace;
         };
-  
-        // Build header row
+        
+        // Build header row and separator
         if (tableMatrix.length > 0 && tableMatrix[0] && Array.isArray(tableMatrix[0])) {
           const headerContent = tableMatrix[0].map((cell, i) => formatCell(cell, i)).join('|');
           markdown += '|' + headerContent + '|\n';
-  
-          // Build separator
-          const separator = columnWidths.map(width => '-'.repeat(width + 2)).join('|');
+          
+          // Build separator with proper column widths
+          const separator = columnWidths.map(width => {
+            const minWidth = Math.max(3, width);
+            return '-'.repeat(minWidth + 2); // +2 for padding
+          }).join('|');
+          
           markdown += '|' + separator + '|\n';
-  
+          
           // Build data rows
           for (let i = 1; i < tableMatrix.length; i++) {
             if (tableMatrix[i] && Array.isArray(tableMatrix[i])) {
@@ -477,7 +526,7 @@ function turndown(content, options, article) {
           // Fallback for tables with no rows or invalid structure
           markdown += '| No data available |\n|-|\n';
         }
-  
+        
         return markdown;
       } catch (error) {
         console.error('Error in table conversion:', error);
