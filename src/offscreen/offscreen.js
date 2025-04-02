@@ -371,18 +371,16 @@ function turndown(content, options, article) {
         // Process each row
         rows.forEach((row, rowIndex) => {
           [...row.children].forEach(cell => {
-            // Get cell's HTML content
-            const cellHtml = cell.innerHTML;
-            
-            // Create temporary element for manipulation
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = cellHtml;
-            
+            // Get cell's content
             let cellContent = '';
             
-            // Only strip links if the option is enabled AND we're in a table
+            // Create a new mini turndown instance for each cell
+            // This ensures links are processed the same way as the rest of the document
             if (options.tableFormatting?.stripLinks) {
               // Strip links
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = cell.innerHTML;
+              
               const links = tempDiv.getElementsByTagName('a');
               while (links.length) {
                 const link = links[0];
@@ -390,26 +388,20 @@ function turndown(content, options, article) {
               }
               cellContent = tempDiv.textContent.trim();
             } else {
-              // If not stripping links, preserve HTML structure including links
-              cellContent = tempDiv.innerHTML.trim();
-            }
-      
-            if (options.tableFormatting?.stripFormatting) {
-              const formattingDiv = document.createElement('div');
-              formattingDiv.innerHTML = cellContent;
-              ['b', 'strong', 'i', 'em'].forEach(tag => {
-                const elements = formattingDiv.getElementsByTagName(tag);
-                while (elements.length) {
-                  const el = elements[0];
-                  el.replaceWith(document.createTextNode(el.textContent.trim()));
-                }
-              });
-              cellContent = formattingDiv.textContent.trim();
+              // Process with Turndown to maintain consistency with the rest of the document
+              // Create a clone of the current turndownService options but without frontmatter/backmatter
+              const cellOptions = { ...options };
+              cellOptions.frontmatter = '';
+              cellOptions.backmatter = '';
+              
+              // Use the main turndown instance to process the cell
+              const { markdown } = turndown(cell.innerHTML, cellOptions, article);
+              cellContent = markdown.trim();
             }
             
             cellContent = cellContent.replace(/\n/g, ' ');
       
-            // Rest of the existing table cell processing code...
+            // Process colspan and rowspan
             const colspan = parseInt(cell.getAttribute('colspan')) || 1;
             const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
       
@@ -419,10 +411,11 @@ function turndown(content, options, article) {
                 const targetCol = tableMatrix[targetRow].length;
                 tableMatrix[targetRow][targetCol] = cellContent;
                 
-                // Calculate visible length (excluding HTML tags)
-                const tempMeasure = document.createElement('div');
-                tempMeasure.innerHTML = cellContent;
-                const visibleLength = tempMeasure.textContent.length;
+                // Calculate visible length (excluding markdown syntax)
+                const tempDiv = document.createElement('div');
+                tempDiv.textContent = cellContent.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Links
+                                             .replace(/[*_~`]+(.*?)[*_~`]+/g, '$1');   // Formatting
+                const visibleLength = tempDiv.textContent.length;
                 
                 if (!columnWidths[targetCol] || visibleLength > columnWidths[targetCol]) {
                   columnWidths[targetCol] = visibleLength;
@@ -431,7 +424,7 @@ function turndown(content, options, article) {
             }
           });
         });
-
+  
         let markdown = '\n\n';
         
         const formatCell = (content, columnIndex) => {
@@ -447,10 +440,10 @@ function turndown(content, options, article) {
             return ` ${safeContent} `;
           }
           
-          // Calculate visible length for centering
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = safeContent;
-          const visibleLength = tempDiv.textContent.length;
+          // Calculate visible length for centering - account for markdown syntax
+          const visibleText = safeContent.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // Links
+                                         .replace(/[*_~`]+(.*?)[*_~`]+/g, '$1');    // Formatting
+          const visibleLength = visibleText.length;
           
           const width = columnWidths[columnIndex] || 0;
           const totalWidth = width + 2;
@@ -463,16 +456,16 @@ function turndown(content, options, article) {
           const rightSpace = ' '.repeat(Math.ceil(Math.max(0, totalWidth - visibleLength) / 2));
           return leftSpace + safeContent + rightSpace;
         };
-
+  
         // Build header row
         if (tableMatrix.length > 0 && tableMatrix[0] && Array.isArray(tableMatrix[0])) {
           const headerContent = tableMatrix[0].map((cell, i) => formatCell(cell, i)).join('|');
           markdown += '|' + headerContent + '|\n';
-
+  
           // Build separator
           const separator = columnWidths.map(width => '-'.repeat(width + 2)).join('|');
           markdown += '|' + separator + '|\n';
-
+  
           // Build data rows
           for (let i = 1; i < tableMatrix.length; i++) {
             if (tableMatrix[i] && Array.isArray(tableMatrix[i])) {
@@ -484,7 +477,7 @@ function turndown(content, options, article) {
           // Fallback for tables with no rows or invalid structure
           markdown += '| No data available |\n|-|\n';
         }
-
+  
         return markdown;
       } catch (error) {
         console.error('Error in table conversion:', error);
