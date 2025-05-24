@@ -35,6 +35,12 @@ async function handleMessages(message, sender, sendResponse) {
     case "download":
       await handleDownloadRequest(message);
       break;
+    case "download-images":
+      await handleImageDownloads(message);
+      break;
+    case "download-images-content-script":
+      await handleImageDownloadsContentScript(message);
+      break;
     case "offscreen-ready":
       // The offscreen document is ready - no action needed
       break;
@@ -191,6 +197,93 @@ async function executeContentDownload(tabId, filename, base64Content) {
 }
 
 /**
+ * Handle image downloads from offscreen document (Downloads API method)
+ */
+async function handleImageDownloads(message) {
+  const { imageList, mdClipsFolder, title, options } = message;
+  
+  try {
+    console.log('Service worker handling image downloads:', Object.keys(imageList).length, 'images');
+    
+    // Calculate the destination path for images
+    const destPath = mdClipsFolder + title.substring(0, title.lastIndexOf('/'));
+    const adjustedDestPath = destPath && !destPath.endsWith('/') ? destPath + '/' : destPath;
+    
+    // Download each image
+    for (const [src, filename] of Object.entries(imageList)) {
+      try {
+        console.log('Downloading image:', src, '->', filename);
+        
+        const imgId = await browser.downloads.download({
+          url: src,
+          filename: adjustedDestPath ? adjustedDestPath + filename : filename,
+          saveAs: false
+        });
+
+        // Track the download
+        activeDownloads.set(imgId, src);
+        
+        console.log('Image download started:', imgId, filename);
+      } catch (imgErr) {
+        console.error('Failed to download image:', src, imgErr);
+        // Continue with other images even if one fails
+      }
+    }
+    
+    console.log('All image downloads initiated');
+  } catch (error) {
+    console.error('Error handling image downloads:', error);
+  }
+}
+
+/**
+ * Handle image downloads for content script method
+ */
+async function handleImageDownloadsContentScript(message) {
+  const { imageList, tabId, options } = message;
+  
+  try {
+    console.log('Service worker handling image downloads via content script');
+    
+    // For content script method, we need to convert images to data URIs
+    // and trigger downloads through the content script
+    for (const [src, filename] of Object.entries(imageList)) {
+      try {
+        // Fetch the image in the service worker context (has proper CORS permissions)
+        const response = await fetch(src);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        const reader = new FileReader();
+        
+        reader.onloadend = async () => {
+          // Send the image data to content script for download
+          await browser.scripting.executeScript({
+            target: { tabId: tabId },
+            func: (filename, dataUri) => {
+              const link = document.createElement('a');
+              link.download = filename;
+              link.href = dataUri;
+              link.click();
+            },
+            args: [filename, reader.result]
+          });
+        };
+        
+        reader.readAsDataURL(blob);
+        console.log('Image processed for content script download:', filename);
+      } catch (imgErr) {
+        console.error('Failed to process image for content script:', src, imgErr);
+      }
+    }
+  } catch (error) {
+    console.error('Error handling content script image downloads:', error);
+  }
+}
+
+/**
  * Ensures the offscreen document exists
  */
 async function ensureOffscreenDocumentExists() {
@@ -339,13 +432,25 @@ function downloadListener(id, url) {
 }
 
 /**
- * Handle download change events
+ * Enhanced download listener to handle image downloads
  */
 function handleDownloadChange(delta) {
-  if (activeDownloads.has(delta.id) && delta.state && delta.state.current === "complete") {
-    const url = activeDownloads.get(delta.id);
-    URL.revokeObjectURL(url);
-    activeDownloads.delete(delta.id);
+  if (activeDownloads.has(delta.id)) {
+    if (delta.state && delta.state.current === "complete") {
+      console.log('Download completed:', delta.id);
+      const url = activeDownloads.get(delta.id);
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+      activeDownloads.delete(delta.id);
+    } else if (delta.state && delta.state.current === "interrupted") {
+      console.error('Download interrupted:', delta.id, delta.error);
+      const url = activeDownloads.get(delta.id);
+      if (url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+      activeDownloads.delete(delta.id);
+    }
   }
 }
 

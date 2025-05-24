@@ -1200,7 +1200,7 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
      
      if(mdClipsFolder && !mdClipsFolder.endsWith('/')) mdClipsFolder += '/';
      
-     // Start the download
+     // Start the markdown download
      const id = await browser.downloads.download({
        url: url,
        filename: mdClipsFolder + title + ".md",
@@ -1214,27 +1214,18 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
        url: url
      });
 
-     // Download images if enabled
-     if (options.downloadImages) {
-       // Get the relative path for image downloads
-       const destPath = mdClipsFolder + title.substring(0, title.lastIndexOf('/'));
-       const adjustedDestPath = destPath && !destPath.endsWith('/') ? destPath + '/' : destPath;
+     // FIXED: Delegate image downloads to service worker instead of handling here
+     if (options.downloadImages && Object.keys(imageList).length > 0) {
+       console.log('Delegating image downloads to service worker:', Object.keys(imageList).length, 'images');
        
-       // Download each image
-       for (const [src, filename] of Object.entries(imageList)) {
-         const imgId = await browser.downloads.download({
-           url: src,
-           filename: adjustedDestPath ? adjustedDestPath + filename : filename,
-           saveAs: false
-         });
-
-         // Notify service worker about download completion
-         browser.runtime.sendMessage({
-           type: 'download-complete',
-           downloadId: imgId,
-           url: src
-         });
-       }
+       // Send image download request to service worker
+       await browser.runtime.sendMessage({
+         type: 'download-images',
+         imageList: imageList,
+         mdClipsFolder: mdClipsFolder,
+         title: title,
+         options: options
+       });
      }
    } catch (err) {
      console.error("Download failed", err);
@@ -1252,6 +1243,16 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
         filename: filename,
         content: base64Content
       });
+
+      // FIXED: Also delegate image downloads for content script method
+      if (options.downloadImages && Object.keys(imageList).length > 0) {
+        await browser.runtime.sendMessage({
+          type: 'download-images-content-script',
+          imageList: imageList,
+          tabId: tabId,
+          options: options
+        });
+      }
     } catch (error) {
       console.error("Failed to initiate download:", error);
     }
