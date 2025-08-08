@@ -544,6 +544,12 @@ function turndown(content, options, article) {
       // if we're looking at an img node with a src
       if (node.nodeName == 'IMG' && node.getAttribute('src')) {
         
+        // 应用与options.js相同的图片样式逻辑
+        const downloadImages = options.downloadImages && options.downloadMode == 'downloadsApi';
+        if (!downloadImages && (options.imageStyle == 'markdown' || options.imageStyle.startsWith('obsidian'))) {
+          options.imageStyle = 'originalSource';
+        }
+        
         // get the original src
         let src = node.getAttribute('src')
         // set the new src
@@ -572,7 +578,16 @@ function turndown(content, options, article) {
             // if using "nofolder" then we just need the filename, no folder
             ? imageFilename.substring(imageFilename.lastIndexOf('/') + 1)
             // otherwise we may need to modify the filename to uri encode parts for a pure markdown link
-            : imageFilename.split('/').map(s => obsidianLink ? s : encodeURI(s)).join('/')
+            : imageFilename.split('/').map(s => {
+                if (obsidianLink) return s;
+                // 先解码可能已经编码的字符串，然后重新编码，避免双重编码
+                try {
+                  return encodeURI(decodeURIComponent(s));
+                } catch (e) {
+                  // 如果解码失败，直接编码原字符串
+                  return encodeURI(s);
+                }
+              }).join('/')
           
           // set the new src attribute to be the local filename
           if(options.imageStyle != 'originalSource' && options.imageStyle != 'base64') node.setAttribute('src', localSrc);
@@ -956,6 +971,15 @@ async function formatTitle(article, providedOptions = null) {
   const options = providedOptions || defaultOptions;
   
   let title = textReplace(options.title, article, options.disallowedChars + '/');
+  
+  // 处理可能的URL编码，先尝试解码再处理
+  try {
+    title = decodeURIComponent(title);
+  } catch (e) {
+    // 如果解码失败，保持原字符串，可能本身就不是编码的
+    console.debug('Title does not appear to be URL encoded:', title);
+  }
+  
   title = title.split('/').map(s => generateValidFileName(s, options.disallowedChars)).join('/');
   return title;
 }
