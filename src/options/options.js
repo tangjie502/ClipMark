@@ -170,14 +170,13 @@ const setCurrentChoice = result => {
     refereshElements();
 }
 
-const restoreOptions = () => {
-    
-
-    const onError = error => {
-        console.error(error);
+const restoreOptions = async () => {
+    try {
+        const result = await browser.storage.sync.get(defaultOptions);
+        setCurrentChoice(result);
+    } catch (error) {
+        console.error('Error restoring options:', error);
     }
-
-    browser.storage.sync.get(defaultOptions).then(setCurrentChoice, onError);
 }
 
 function textareaInput(){
@@ -282,12 +281,12 @@ const buttonClick = (e) => {
     }
 }
 
-const loaded = () => {
+const loaded = async () => {
     document.querySelectorAll('.radio-container,.checkbox-container,.textbox-container,.button-container').forEach(container => {
         container.dataset.height = container.clientHeight;
     });
 
-    restoreOptions();
+    await restoreOptions();
 
     document.querySelectorAll('input,textarea,button').forEach(input => {
         if (input.tagName == "TEXTAREA" || input.type == "text") {
@@ -300,10 +299,262 @@ const loaded = () => {
     })
 }
 
-document.addEventListener("DOMContentLoaded", loaded);
+// 移除重复的事件监听器，改为在initializeOptionsPage中统一处理
 document.querySelectorAll(".save").forEach(el => el.addEventListener("click", saveOptions));
 document.querySelectorAll(".status").forEach(el => el.addEventListener("click", hideStatus));
 document.querySelectorAll(".input-sizer > textarea").forEach(el => el.addEventListener("input", textareaInput));
+
+// 刷新和关闭功能
+let hasUnsavedChanges = false;
+let lastSavedData = null;
+
+// 检测表单更改
+function trackFormChanges() {
+    const formElements = [
+        ...document.querySelectorAll('input'),
+        ...document.querySelectorAll('textarea'),
+        ...document.querySelectorAll('select')
+    ];
+    
+    formElements.forEach(element => {
+        element.addEventListener('input', () => {
+            hasUnsavedChanges = checkForChanges();
+            updateUIState();
+        });
+        element.addEventListener('change', () => {
+            hasUnsavedChanges = checkForChanges();
+            updateUIState();
+        });
+    });
+}
+
+// 检查当前表单数据是否与最后保存的数据不同
+function checkForChanges() {
+    if (!lastSavedData) return false;
+    
+    const currentData = getCurrentFormData();
+    return JSON.stringify(currentData) !== JSON.stringify(lastSavedData);
+}
+
+// 获取当前表单数据
+function getCurrentFormData() {
+    return {
+        frontmatter: document.querySelector("[name='frontmatter']")?.value || '',
+        backmatter: document.querySelector("[name='backmatter']")?.value || '',
+        title: document.querySelector("[name='title']")?.value || '',
+        disallowedChars: document.querySelector("[name='disallowedChars']")?.value || '',
+        includeTemplate: document.querySelector("[name='includeTemplate']")?.checked || false,
+        saveAs: document.querySelector("[name='saveAs']")?.checked || false,
+        downloadImages: document.querySelector("[name='downloadImages']")?.checked || false,
+        imagePrefix: document.querySelector("[name='imagePrefix']")?.value || '',
+        mdClipsFolder: document.querySelector("[name='mdClipsFolder']")?.value || '',
+        turndownEscape: document.querySelector("[name='turndownEscape']")?.checked || false,
+        contextMenus: document.querySelector("[name='contextMenus']")?.checked || false,
+        obsidianIntegration: document.querySelector("[name='obsidianIntegration']")?.checked || false,
+        obsidianVault: document.querySelector("[name='obsidianVault']")?.value || '',
+        obsidianFolder: document.querySelector("[name='obsidianFolder']")?.value || '',
+        preserveCodeFormatting: document.querySelector("[name='preserveCodeFormatting']")?.checked || false,
+        tableFormatting: {
+            stripLinks: document.querySelector("[name='tableFormatting.stripLinks']")?.checked || false,
+            stripFormatting: document.querySelector("[name='tableFormatting.stripFormatting']")?.checked || false,
+            prettyPrint: document.querySelector("[name='tableFormatting.prettyPrint']")?.checked || false,
+            centerText: document.querySelector("[name='tableFormatting.centerText']")?.checked || false
+        },
+        headingStyle: getCheckedValue(document.querySelectorAll("input[name='headingStyle']")),
+        hr: getCheckedValue(document.querySelectorAll("input[name='hr']")),
+        bulletListMarker: getCheckedValue(document.querySelectorAll("input[name='bulletListMarker']")),
+        codeBlockStyle: getCheckedValue(document.querySelectorAll("input[name='codeBlockStyle']")),
+        fence: getCheckedValue(document.querySelectorAll("input[name='fence']")),
+        emDelimiter: getCheckedValue(document.querySelectorAll("input[name='emDelimiter']")),
+        strongDelimiter: getCheckedValue(document.querySelectorAll("input[name='strongDelimiter']")),
+        linkStyle: getCheckedValue(document.querySelectorAll("input[name='linkStyle']")),
+        linkReferenceStyle: getCheckedValue(document.querySelectorAll("input[name='linkReferenceStyle']")),
+        imageStyle: getCheckedValue(document.querySelectorAll("input[name='imageStyle']")),
+        imageRefStyle: getCheckedValue(document.querySelectorAll("input[name='imageRefStyle']")),
+        downloadMode: getCheckedValue(document.querySelectorAll("input[name='downloadMode']"))
+    };
+}
+
+// 更新UI状态
+function updateUIState() {
+    const refreshBtn = document.getElementById('refreshBtn');
+    const closeBtn = document.getElementById('closeBtn');
+    
+    if (hasUnsavedChanges) {
+        // 添加视觉提示表示有未保存的更改
+        refreshBtn.style.boxShadow = '0 0 0 2px rgba(255, 193, 7, 0.5)';
+        closeBtn.style.boxShadow = '0 0 0 2px rgba(255, 193, 7, 0.5)';
+        refreshBtn.title = '⚠️ 有未保存的更改 - 点击刷新';
+        closeBtn.title = '⚠️ 有未保存的更改 - 点击关闭';
+    } else {
+        refreshBtn.style.boxShadow = '';
+        closeBtn.style.boxShadow = '';
+        refreshBtn.title = '刷新页面';
+        closeBtn.title = '关闭页面';
+    }
+}
+
+// 刷新按钮功能
+function handleRefresh() {
+    if (hasUnsavedChanges) {
+        const confirmRefresh = confirm(
+            '您有未保存的更改！\n\n' +
+            '点击"确定"丢弃更改并刷新页面\n' +
+            '点击"取消"返回继续编辑\n\n' +
+            '建议先保存设置再刷新。'
+        );
+        
+        if (!confirmRefresh) {
+            return;
+        }
+    }
+    
+    // 显示刷新状态
+    const refreshBtn = document.getElementById('refreshBtn');
+    const originalText = refreshBtn.innerHTML;
+    refreshBtn.innerHTML = '🔄 刷新中...';
+    refreshBtn.disabled = true;
+    
+    // 延迟一点时间让用户看到反馈
+    setTimeout(() => {
+        window.location.reload();
+    }, 300);
+}
+
+// 关闭按钮功能
+function handleClose() {
+    if (hasUnsavedChanges) {
+        const confirmClose = confirm(
+            '您有未保存的更改！\n\n' +
+            '点击"确定"丢弃更改并关闭页面\n' +
+            '点击"取消"返回继续编辑\n\n' +
+            '建议先保存设置再关闭。'
+        );
+        
+        if (!confirmClose) {
+            return;
+        }
+    }
+    
+    // 尝试关闭窗口
+    try {
+        // 对于扩展选项页面，通常在新标签页中打开
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            window.close();
+        }
+    } catch (error) {
+        // 如果无法关闭窗口，导航到扩展管理页面或显示消息
+        console.log('无法关闭窗口，尝试其他方式');
+        
+        // 尝试导航到chrome扩展页面（仅Chrome）
+        if (navigator.userAgent.includes('Chrome')) {
+            try {
+                window.location.href = 'chrome://extensions/';
+                return;
+            } catch (e) {
+                // 忽略错误，继续下一步
+            }
+        }
+        
+        // 显示消息提示用户手动关闭
+        alert('请手动关闭此标签页');
+    }
+}
+
+// 修改原有的save函数，更新最后保存的数据
+const originalSave = save;
+window.save = function() {
+    const spinner = document.getElementById("spinner");
+    spinner.style.display = "block";
+    
+    browser.storage.sync.set(options)
+        .then(() => {
+            browser.contextMenus.update("toggle-includeTemplate", {
+                checked: options.includeTemplate
+            });
+            try {
+                browser.contextMenus.update("tabtoggle-includeTemplate", {
+                    checked: options.includeTemplate
+                });
+            } catch { }
+            
+            browser.contextMenus.update("toggle-downloadImages", {
+                checked: options.downloadImages
+            });
+            try {
+                browser.contextMenus.update("tabtoggle-downloadImages", {
+                    checked: options.downloadImages
+                });
+            } catch { }
+        })
+        .then(() => {
+            document.querySelectorAll(".status").forEach(statusEl => {
+                statusEl.textContent = "设置已保存 💾";
+                statusEl.classList.remove('error');
+                statusEl.classList.add('success');
+                statusEl.style.opacity = 1;
+            });
+            setTimeout(() => {
+                document.querySelectorAll(".status").forEach(statusEl => {
+                    statusEl.style.opacity = 0;
+                });
+            }, 5000);
+            spinner.style.display = "none";
+            
+            // 保存成功后更新最后保存的数据
+            lastSavedData = getCurrentFormData();
+            hasUnsavedChanges = false;
+            updateUIState();
+        })
+        .catch(err => {
+            document.querySelectorAll(".status").forEach(statusEl => {
+                statusEl.textContent = err;
+                statusEl.classList.remove('success');
+                statusEl.classList.add('error');
+                statusEl.style.opacity = 1;
+            });
+            spinner.style.display = "none";
+            console.error('Save failed:', err);
+        });
+};
+
+// 页面加载完成后初始化
+function initializeOptionsPage() {
+    // 初始化追踪状态
+    lastSavedData = getCurrentFormData();
+    hasUnsavedChanges = false;
+    updateUIState();
+    trackFormChanges();
+    
+    // 绑定按钮事件
+    const refreshBtn = document.getElementById('refreshBtn');
+    const closeBtn = document.getElementById('closeBtn');
+    
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', handleRefresh);
+    }
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', handleClose);
+    }
+    
+    // 监听页面卸载事件，提醒用户保存未保存的更改
+    window.addEventListener('beforeunload', (event) => {
+        if (hasUnsavedChanges) {
+            const message = '您有未保存的更改，确定要离开吗？';
+            event.returnValue = message;
+            return message;
+        }
+    });
+}
+
+// 在DOM加载完成后初始化
+document.addEventListener("DOMContentLoaded", async () => {
+    await loaded(); // 原有的初始化函数
+    initializeOptionsPage(); // 新的初始化函数
+});
 
 /// https://www.somacon.com/p143.php
 // return the value of the radio button that is checked

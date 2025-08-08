@@ -1,13 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 
 <head>
     <meta charset="UTF-8">
-    <title>MarkSnip Options</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarkSnip 设置</title>
     <link rel="stylesheet" type="text/css" href="options.css" media="screen">
 </head>
 
 <body>
+    <div class="options-container">
+        <!-- 主卡片容器 -->
+        <div class="options-card">
+            <!-- 标题栏 -->
+            <div class="header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <span class="header-icon">⚙️</span>
+                        <h1 class="header-title">MarkSnip 设置</h1>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="refreshBtn">🔄 刷新</button>
+                        <button class="btn btn-secondary" id="closeBtn">❌ 关闭</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设置内容区域 -->
+            <div class="content-area">
     <details>
         <summary>
             <h2>Custom text ℹ️</h2>
@@ -421,8 +441,11 @@ const helloWorld = () => {
         <div class="input-sizer"><button name="export" id="export">Export</button></div>
     </div>
 
-    <div id="spinner" style="display: none;"></div>
-    <div id="status" class="status"></div>
+                <div id="spinner" style="display: none;"></div>
+                <div id="status" class="status"></div>
+            </div>
+        </div>
+    </div>
 
     <script src="../browser-polyfill.min.js"></script>
     <script src="../shared/default-options.js"></script>
