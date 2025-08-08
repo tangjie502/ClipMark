@@ -9,16 +9,56 @@
 
 <body>
   <div id="container">
-    
-    <a href="#" class="button toggle" id="downloadImages"><i class="check"></i>Download Images</a>
-    <a href="/options/options.html" id="options" target="_blank">open options</a>
-    <a href="#" id="batchProcess">batch</a>
-    <div class="row" id="clipOption">
-      <a href="#" class="button toggle" id="selected"><i class="check"></i>Selected Text</a>
-      <a href="#" class="button toggle" id="document"><i class="check"></i>Entire Document</a>
+    <!-- 顶部工具栏 -->
+    <div class="top-toolbar">
+      <div class="toolbar-left">
+        <h2 class="app-title">📄 MarkSnip</h2>
+      </div>
+      <div class="toolbar-right">
+        <a href="#" id="batchProcess" class="icon-button" title="批量处理">📦</a>
+        <a href="/options/options.html" id="options" target="_blank" class="icon-button" title="设置">⚙️</a>
+      </div>
     </div>
-    <a href="#" class="button toggle" id="includeTemplate"><i class="check"></i>Include front/back template</a>
-    <input type="text" id="title" placeholder="自定义文件名（可选）"></input>
+
+    <!-- 选项控制区 -->
+    <div class="control-section">
+      <div class="option-grid">
+        <a href="#" class="option-card toggle" id="downloadImages">
+          <i class="check"></i>
+          <div class="option-content">
+            <div class="option-title">下载图片</div>
+            <div class="option-desc">同时保存文档中的图片</div>
+          </div>
+        </a>
+        
+        <a href="#" class="option-card toggle" id="includeTemplate">
+          <i class="check"></i>
+          <div class="option-content">
+            <div class="option-title">包含模板</div>
+            <div class="option-desc">添加前后文档模板</div>
+          </div>
+        </a>
+      </div>
+      
+      <div class="extraction-mode" id="clipOption">
+        <label class="mode-label">提取模式：</label>
+        <div class="mode-buttons">
+          <a href="#" class="mode-button toggle" id="selected">
+            <i class="check"></i>
+            <span>选中文本</span>
+          </a>
+          <a href="#" class="mode-button toggle" id="document">
+            <i class="check"></i>
+            <span>整个文档</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文件名输入 -->
+    <div class="input-section">
+      <input type="text" id="title" placeholder="自定义文件名（可选）" class="file-input">
+    </div>
     
     <!-- 预览区域 -->
     <div class="preview-area">
@@ -40,17 +80,48 @@
         </div>
     </div>
     
-    <div class="button-row">
-        <a href="#" class="button primary" id="extract">📄 提取内容</a>
-        <a href="#" class="button secondary" id="preview" style="display: none;">👁️ 预览</a>
-    </div>
-    <div class="button-row">
-        <a href="#" class="button" id="download" style="display: none;">⬇️ 下载</a>
-        <a href="#" class="button" id="copy" style="display: none;">📋 复制</a>
-    </div>
-    <div class="button-row">
-        <a href="#" class="button" id="downloadSelection" style="display: none;">⬇️ 下载选中</a>
-        <a href="#" class="button" id="copySelection" style="display: none;">📋 复制选中</a>
+    <!-- 主要操作区域 -->
+    <div class="action-section">
+      <div class="primary-actions">
+        <button class="action-button primary" id="extract">
+          <div class="button-icon">📄</div>
+          <div class="button-text">
+            <div class="button-title">提取内容</div>
+            <div class="button-subtitle">从当前页面提取内容</div>
+          </div>
+        </button>
+      </div>
+      
+      <div class="secondary-actions" id="secondaryActions" style="display: none;">
+        <div class="action-row">
+          <button class="action-button secondary" id="preview">
+            <div class="button-icon">👁️</div>
+            <div class="button-text">预览</div>
+          </button>
+          
+          <button class="action-button secondary" id="download">
+            <div class="button-icon">⬇️</div>
+            <div class="button-text">下载</div>
+          </button>
+          
+          <button class="action-button secondary" id="copy">
+            <div class="button-icon">📋</div>
+            <div class="button-text">复制</div>
+          </button>
+        </div>
+        
+        <div class="action-row selection-actions" id="selectionActions" style="display: none;">
+          <button class="action-button outline" id="downloadSelection">
+            <div class="button-icon">📝</div>
+            <div class="button-text">下载选中</div>
+          </button>
+          
+          <button class="action-button outline" id="copySelection">
+            <div class="button-icon">📄</div>
+            <div class="button-text">复制选中</div>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="batchContainer" style="display: none;">

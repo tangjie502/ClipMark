@@ -54,13 +54,33 @@
 }
 
 body {
-    width: 350px;
-    height: 500px;
+    width: 380px;
+    min-height: 540px;
+    max-height: 600px;
     border-radius: 0.5em;
-    overflow: hidden;
-    font-family: sans-serif;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: var(--bg);
     font-size: var(--font-size);
+    color: var(--fg);
+}
+
+body::-webkit-scrollbar {
+    width: 6px;
+}
+
+body::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+body::-webkit-scrollbar-thumb:hover {
+    background: var(--fg-primary);
 }
 
 @keyframes spinner {
@@ -108,8 +128,10 @@ input#title {
 #container {
     width: 100%;
     height: 100%;
-    display: none;
+    display: flex;
     flex-direction: column;
+    padding: 20px;
+    box-sizing: border-box;
 }
 .row {
     flex-direction: row;
@@ -381,12 +403,187 @@ a.button {
     }
 }
 
-/* 预览区域样式 */
-.preview-area {
-    margin: 16px 0;
+/* 顶部工具栏 */
+.top-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0 20px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+}
+
+.app-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--fg);
+}
+
+.toolbar-right {
+    display: flex;
+    gap: 12px;
+}
+
+.icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--bg-primary);
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.icon-button:hover {
+    background: var(--primary);
+    color: var(--bg);
+    transform: scale(1.1);
+}
+
+/* 控制选项区域 */
+.control-section {
+    margin-bottom: 24px;
+}
+
+.option-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.option-card {
+    display: flex;
+    align-items: center;
+    padding: 16px;
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    text-decoration: none;
+    color: var(--fg);
+    transition: all 0.2s ease;
+    position: relative;
+    cursor: pointer;
+}
+
+.option-card:hover {
+    border-color: var(--primary);
+    background: var(--bg-primary);
+}
+
+.option-card.checked {
+    border-color: var(--primary);
+    background: var(--bg-primary);
+}
+
+.option-content {
+    flex: 1;
+    margin-left: 12px;
+}
+
+.option-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--fg);
+}
+
+.option-desc {
+    font-size: 12px;
+    color: var(--fg-primary);
+    opacity: 0.8;
+}
+
+/* 提取模式 */
+.extraction-mode {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.mode-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--fg);
+    white-space: nowrap;
+}
+
+.mode-buttons {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+}
+
+.mode-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
+    text-decoration: none;
+    color: var(--fg);
+    font-size: 13px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    flex: 1;
+    justify-content: center;
+}
+
+.mode-button:hover {
+    border-color: var(--primary);
+    background: var(--bg-primary);
+}
+
+.mode-button.checked {
+    border-color: var(--primary);
+    background: var(--bg-primary);
+    color: var(--primary);
+}
+
+/* 文件名输入区域 */
+.input-section {
+    margin-bottom: 20px;
+}
+
+.file-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--fg);
+    transition: border-color 0.2s ease;
+}
+
+.file-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.file-input::placeholder {
+    color: var(--fg-primary);
+    opacity: 0.7;
+}
+
+/* 预览区域样式 */
+.preview-area {
+    margin: 20px 0;
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 12px;
     overflow: hidden;
 }
 
@@ -478,4 +675,135 @@ a.button {
 .button.secondary:hover {
     background: var(--fg-primary) !important;
     color: var(--bg) !important;
+}
+
+/* 操作区域样式 */
+.action-section {
+    margin-top: 24px;
+}
+
+.primary-actions {
+    margin-bottom: 20px;
+}
+
+.action-button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 16px 20px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    background: var(--primary);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.action-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+}
+
+.action-button.primary {
+    background: linear-gradient(135deg, var(--primary), #357ABD);
+    min-height: 60px;
+}
+
+.action-button.primary:hover {
+    background: linear-gradient(135deg, #357ABD, #2969A3);
+}
+
+.action-button.secondary {
+    background: var(--bg);
+    color: var(--fg);
+    border-color: var(--border);
+    min-height: 48px;
+    margin-bottom: 8px;
+}
+
+.action-button.secondary:hover {
+    border-color: var(--primary);
+    background: var(--bg-primary);
+    color: var(--primary);
+}
+
+.action-button.outline {
+    background: transparent;
+    color: var(--fg-primary);
+    border-color: var(--border);
+    min-height: 44px;
+}
+
+.action-button.outline:hover {
+    border-color: var(--primary);
+    background: var(--bg-primary);
+    color: var(--primary);
+}
+
+.button-icon {
+    font-size: 20px;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.button-text {
+    flex: 1;
+    text-align: left;
+}
+
+.button-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.button-subtitle {
+    font-size: 12px;
+    opacity: 0.8;
+    font-weight: normal;
+}
+
+.action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.action-row.selection-actions {
+    grid-template-columns: 1fr 1fr;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+/* 响应式布局优化 */
+@media (max-width: 400px) {
+    .option-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .extraction-mode {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    
+    .mode-buttons {
+        justify-content: stretch;
+    }
+    
+    .action-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .action-row.selection-actions {
+        grid-template-columns: 1fr;
+    }
 }

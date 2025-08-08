@@ -55,24 +55,30 @@ function initializeUI() {
 
 // 隐藏操作按钮
 function hideActionButtons() {
-    const buttons = ['download', 'copy', 'downloadSelection', 'copySelection', 'preview'];
-    buttons.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.style.display = 'none';
-        }
-    });
+    const secondaryActions = document.getElementById('secondaryActions');
+    const selectionActions = document.getElementById('selectionActions');
+    
+    if (secondaryActions) {
+        secondaryActions.style.display = 'none';
+    }
+    if (selectionActions) {
+        selectionActions.style.display = 'none';
+    }
 }
 
 // 显示操作按钮
 function showActionButtons() {
-    document.getElementById('download').style.display = 'inline-block';
-    document.getElementById('copy').style.display = 'inline-block';
-    document.getElementById('preview').style.display = 'inline-block';
+    const secondaryActions = document.getElementById('secondaryActions');
+    const selectionActions = document.getElementById('selectionActions');
     
+    // 显示主要操作按钮
+    secondaryActions.style.display = 'block';
+    
+    // 如果有选中内容，显示选择相关按钮
     if (extractedContent.hasSelection) {
-        document.getElementById('downloadSelection').style.display = 'inline-block';
-        document.getElementById('copySelection').style.display = 'inline-block';
+        selectionActions.style.display = 'block';
+    } else {
+        selectionActions.style.display = 'none';
     }
 }
 
