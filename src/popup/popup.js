@@ -83,7 +83,6 @@ function showActionButtons() {
 }
 
 // 设置事件监听器
-document.getElementById("extract").addEventListener("click", extractContent);
 document.getElementById("batchSelect").addEventListener("click", startPageLinkSelection);
 document.getElementById("preview").addEventListener("click", openPreview);
 document.getElementById("download").addEventListener("click", download);
@@ -185,40 +184,7 @@ function showLinkSelectionNotification(urlText) {
     }
 }
 
-// 提取内容功能
-async function extractContent(e) {
-    e.preventDefault();
-    
-    try {
-        // 显示加载状态
-        updatePreviewStatus('正在提取内容...', '请稍候，正在处理页面内容');
-        
-        // 获取当前标签页
-        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-        if (tabs.length === 0) {
-            throw new Error('无法获取当前标签页');
-        }
-        
-        const currentTab = tabs[0];
-        
-        // 向service worker请求提取内容
-        const response = await browser.runtime.sendMessage({
-            type: "extract-for-preview",
-            tabId: currentTab.id
-        });
-        
-        if (response && response.success) {
-            // 内容提取成功，等待结果
-            // 结果将通过消息机制返回
-        } else {
-            throw new Error('提取内容失败');
-        }
-        
-    } catch (error) {
-        console.error('Extract content error:', error);
-        updatePreviewStatus('提取失败', '请重试或检查页面是否正常加载');
-    }
-}
+
 
 // 打开预览页面
 async function openPreview(e) {
@@ -858,6 +824,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // 处理提取的内容
 function handleExtractedContent(data) {
+    if (data.error) {
+        // 处理错误情况
+        console.error('Content extraction error:', data.error);
+        updatePreviewStatus('提取失败', `错误: ${data.error}`);
+        return;
+    }
+    
     extractedContent.markdown = data.markdown || '';
     extractedContent.html = data.html || '';
     extractedContent.title = data.title || '未命名文档';

@@ -67,7 +67,7 @@ async function handleMessages(message, sender, sendResponse) {
       break;
       
     case "extract-for-preview":
-      await extractContentForPreview(message);
+      await extractContentForPreview(message, sendResponse);
       break;
 
     case "forward-get-article-content":
@@ -78,6 +78,9 @@ async function handleMessages(message, sender, sendResponse) {
       await executeContentDownload(message.tabId, message.filename, message.content);
       break;
   }
+  
+  // 返回 true 表示我们会异步处理响应
+  return true;
 }
 
 /**
@@ -1364,12 +1367,15 @@ async function startLinkSelectionFromPopup(message) {
 /**
  * Extract content for preview
  */
-async function extractContentForPreview(message) {
+async function extractContentForPreview(message, sendResponse) {
   try {
     const tab = await browser.tabs.get(message.tabId);
     
     // 确保content scripts已加载
     await ensureScripts(tab.id);
+    
+    // 立即发送成功响应给popup
+    sendResponse({ success: true });
     
     // 创建一个临时的消息监听器来捕获内容
     const contentPromise = new Promise((resolve, reject) => {
@@ -1410,6 +1416,9 @@ async function extractContentForPreview(message) {
     
   } catch (error) {
     console.error('Error extracting content for preview:', error);
+    
+    // 发送错误响应给popup
+    sendResponse({ success: false, error: error.message });
     
     // 发送错误消息给popup
     try {

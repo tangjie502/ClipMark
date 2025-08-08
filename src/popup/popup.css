@@ -791,12 +791,6 @@ a.button {
 
 .primary-actions {
     margin-bottom: 20px; /* 恢复间距 */
-    display: flex;
-    gap: 12px; /* 两个主要按钮之间的间距 */
-}
-
-.primary-actions .action-button {
-    flex: 1; /* 两个按钮平均分配宽度 */
 }
 
 /* 🎯 综合优化：主要按钮（所有优化） */
