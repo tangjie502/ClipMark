@@ -345,6 +345,10 @@ function getCodeLanguage(node) {
  */
 function turndown(content, options, article) {
   console.log("Starting turndown with options:", options.tableFormatting); // Debug log
+  console.log("Using article baseURI:", article.baseURI); // Debug baseURI
+
+  // Initialize imageList for collecting images
+  let imageList = {};
 
   if (options.turndownEscape) TurndownService.prototype.escape = TurndownService.prototype.defaultEscape;
   else TurndownService.prototype.escape = s => s;
@@ -542,7 +546,6 @@ function turndown(content, options, article) {
 
   turndownService.keep(['iframe', 'sub', 'sup', 'u', 'ins', 'del', 'small', 'big']);
 
-  let imageList = {};
   // add an image rule
   turndownService.addRule('images', {
     filter: function (node, tdopts) {
@@ -670,6 +673,29 @@ function turndown(content, options, article) {
     }
   });
 
+  // add a rule for images  
+  turndownService.addRule('images', {
+    filter: (node, tdopts) => {
+      return node.nodeName == 'IMG' && node.getAttribute('src')
+    },
+    replacement: (content, node, tdopts) => {
+      // get the src and validate it with baseURI
+      const src = validateUri(node.getAttribute('src'), article.baseURI);
+      const alt = cleanAttribute(node.getAttribute('alt')) || '';
+      const title = cleanAttribute(node.getAttribute('title'));
+      
+      // Add to imageList if downloading images
+      if (options.downloadImages) {
+        const filename = getImageFilename(src, options);
+        imageList[src] = filename;
+      }
+      
+      // Format as markdown image
+      const titlePart = title ? ` "${title}"` : '';
+      return `![${alt}](${src}${titlePart})`;
+    }
+  });
+
   // handle multiple lines math
   turndownService.addRule('mathjax', {
     filter(node, options) {
@@ -788,6 +814,25 @@ async function getArticleFromDom(domString, options) {
   const parser = new DOMParser();
   const dom = parser.parseFromString(domString, "text/html");
   
+  // Extract the original baseURI from the base element in the DOM string
+  let originalBaseURI = null;
+  const baseMatch = domString.match(/<base[^>]*href=["']([^"']+)["'][^>]*>/i);
+  if (baseMatch) {
+    originalBaseURI = baseMatch[1];
+    console.log('Extracted base URI from DOM string:', originalBaseURI);
+  }
+  
+  // If we have an original base URI, make sure the parsed DOM uses it
+  if (originalBaseURI) {
+    let baseElement = dom.head.querySelector('base');
+    if (!baseElement) {
+      baseElement = dom.createElement('base');
+      dom.head.prepend(baseElement);
+    }
+    baseElement.setAttribute('href', originalBaseURI);
+    console.log('Set base element href to:', originalBaseURI);
+  }
+  
   // Now options is defined
   if (!options.preserveCodeFormatting) {
     dom.querySelectorAll('pre code').forEach(codeBlock => {
@@ -886,11 +931,13 @@ async function getArticleFromDom(domString, options) {
  const article = new Readability(dom).parse();
 
  // Add essential metadata
- article.baseURI = dom.baseURI;
+ article.baseURI = originalBaseURI || dom.baseURI;
  article.pageTitle = dom.title;
  
+ console.log('Using baseURI for article:', article.baseURI);
+ 
  // Extract URL information
- const url = new URL(dom.baseURI);
+ const url = new URL(article.baseURI);
  article.hash = url.hash;
  article.host = url.host;
  article.origin = url.origin;

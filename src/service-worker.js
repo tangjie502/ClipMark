@@ -1353,11 +1353,11 @@ async function handleBatchLinksSelected(message) {
         current++;
         console.log(`Loading ${current}/${total}: ${urlObj.url}`);
         
-        const tab = await browser.tabs.create({ 
+      const tab = await browser.tabs.create({ 
           url: urlObj.url, 
-          active: false 
-        });
-        
+        active: false 
+      });
+      
         if (urlObj.title) {
           tab.customTitle = urlObj.title;
         }
@@ -1365,27 +1365,27 @@ async function handleBatchLinksSelected(message) {
         tabs.push(tab);
         
         // 等待标签页加载
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
             reject(new Error(`Timeout loading ${urlObj.url}`));
-          }, 30000);
-          
-          function listener(tabId, info) {
-            if (tabId === tab.id && info.status === 'complete') {
-              clearTimeout(timeout);
-              browser.tabs.onUpdated.removeListener(listener);
+        }, 30000);
+        
+        function listener(tabId, info) {
+          if (tabId === tab.id && info.status === 'complete') {
+            clearTimeout(timeout);
+            browser.tabs.onUpdated.removeListener(listener);
               console.log(`Tab ${tabId} loaded`);
-              resolve();
-            }
+            resolve();
           }
-          browser.tabs.onUpdated.addListener(listener);
-        });
+        }
+        browser.tabs.onUpdated.addListener(listener);
+      });
 
-        // 确保脚本已注入
-        await browser.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ["/browser-polyfill.min.js", "/contentScript/contentScript.js"]
-        });
+      // 确保脚本已注入
+      await browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["/browser-polyfill.min.js", "/contentScript/contentScript.js"]
+      });
       }
 
       // 重置计数器，开始转换阶段
@@ -1402,14 +1402,14 @@ async function handleBatchLinksSelected(message) {
           const requestId = `batch-${Date.now()}-${tab.id}`;
           
           const displayMdPromise = new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
+        const timeout = setTimeout(() => {
               reject(new Error('Timeout waiting for markdown generation'));
-            }, 30000);
-
+        }, 30000);
+        
             // 监听 markdown-result 消息（来自 offscreen 处理）
             function markdownResultListener(message) {
               if (message.type === "markdown-result" && message.requestId === requestId) {
-                clearTimeout(timeout);
+            clearTimeout(timeout);
                 browser.runtime.onMessage.removeListener(markdownResultListener);
                 console.log(`Received markdown result for tab ${tab.id}`);
                 
@@ -1523,51 +1523,103 @@ function mergeMarkdownDocuments(markdownArray) {
  * Trigger content extraction for a tab with request ID tracking
  */
 async function triggerContentExtractionWithRequestId(tabId, requestId) {
-  try {
-    // Ensure scripts are injected
-    await ensureScripts(tabId);
-    
-    // Execute script to get DOM and selection
-    const results = await browser.scripting.executeScript({
-      target: { tabId: tabId },
-      func: () => {
-        if (typeof getSelectionAndDom === 'function') {
-          return getSelectionAndDom();
-        }
-        return null;
+  const maxRetries = 3;
+  let lastError = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      console.log(`Content extraction attempt ${attempt + 1}/${maxRetries} for tab ${tabId}`);
+      
+      // Check if tab still exists
+      try {
+        await browser.tabs.get(tabId);
+      } catch (e) {
+        throw new Error('Tab no longer exists');
       }
-    });
-    
-    if (results && results[0]?.result) {
-      // Get options for processing
-      const options = await getOptions();
       
-      // Always use offscreen document for consistent processing
-      await ensureOffscreenDocumentExists();
+      // Wait a bit before each attempt (except the first)
+      if (attempt > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
       
-      // Send to offscreen for processing with request ID
-      await browser.runtime.sendMessage({
-        target: 'offscreen',
-        type: 'process-content',
-        requestId: requestId,
-        data: {
-          type: "clip",
-          dom: results[0].result.dom,
-          selection: results[0].result.selection,
-          clipSelection: false // 批量处理不使用选择
-        },
-        tabId: tabId,
-        options: options
+      // Ensure scripts are injected with verification
+      await ensureScripts(tabId);
+      
+      // Additional verification that scripts are ready
+      const verificationResults = await browser.scripting.executeScript({
+        target: { tabId: tabId },
+        func: () => {
+          return {
+            hasGetSelectionAndDom: typeof getSelectionAndDom === 'function',
+            documentReady: document.readyState === 'complete',
+            hasBody: !!document.body
+          };
+        }
       });
       
-      console.log(`Content extraction triggered for tab ${tabId} with requestId ${requestId}`);
-    } else {
-      throw new Error('Failed to get content from tab');
+      if (!verificationResults?.[0]?.result?.hasGetSelectionAndDom) {
+        throw new Error('Content script not properly loaded');
+      }
+      
+      if (!verificationResults[0].result.documentReady || !verificationResults[0].result.hasBody) {
+        throw new Error('Document not ready');
+      }
+      
+      // Execute script to get DOM and selection
+      const results = await browser.scripting.executeScript({
+        target: { tabId: tabId },
+        func: () => {
+          try {
+            return getSelectionAndDom();
+          } catch (error) {
+            return { error: error.message };
+          }
+        }
+      });
+      
+      if (results && results[0]?.result && !results[0].result.error) {
+        // Get options for processing
+        const options = await getOptions();
+        
+        // Always use offscreen document for consistent processing
+        await ensureOffscreenDocumentExists();
+        
+        // Send to offscreen for processing with request ID
+        await browser.runtime.sendMessage({
+          target: 'offscreen',
+          type: 'process-content',
+          requestId: requestId,
+          data: {
+            type: "clip",
+            dom: results[0].result.dom,
+            selection: results[0].result.selection,
+            clipSelection: false // 批量处理不使用选择
+          },
+          tabId: tabId,
+          options: options
+        });
+        
+        console.log(`Content extraction triggered successfully for tab ${tabId} with requestId ${requestId}`);
+        return; // Success, exit the retry loop
+      } else {
+        const errorMsg = results?.[0]?.result?.error || 'Failed to get content from tab';
+        throw new Error(errorMsg);
+      }
+    } catch (error) {
+      lastError = error;
+      console.warn(`Content extraction attempt ${attempt + 1} failed for tab ${tabId}:`, error.message);
+      
+      // Don't retry for certain types of errors
+      if (error.message.includes('Tab no longer exists') || 
+          error.message.includes('No tab with id')) {
+        break;
+      }
     }
-  } catch (error) {
-    console.error(`Error triggering content extraction for tab ${tabId}:`, error);
-    throw error;
   }
+  
+  // All retries failed
+  console.error(`All content extraction attempts failed for tab ${tabId}:`, lastError);
+  throw lastError || new Error('Content extraction failed after multiple attempts');
 }
 
 /**
