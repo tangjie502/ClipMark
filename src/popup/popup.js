@@ -84,6 +84,7 @@ function showActionButtons() {
 
 // 设置事件监听器
 document.getElementById("extract").addEventListener("click", extractContent);
+document.getElementById("batchSelect").addEventListener("click", startPageLinkSelection);
 document.getElementById("preview").addEventListener("click", openPreview);
 document.getElementById("download").addEventListener("click", download);
 document.getElementById("downloadSelection").addEventListener("click", downloadSelection);
