@@ -4,9 +4,6 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <link rel="stylesheet" href="lib/codemirror.css">
-    <link rel="stylesheet" href="lib/xq-dark.css">
-    <link rel="stylesheet" href="lib/xq-light.css">
     <link rel="stylesheet" href="popup.css">
   </head>
 
@@ -21,15 +18,39 @@
       <a href="#" class="button toggle" id="document"><i class="check"></i>Entire Document</a>
     </div>
     <a href="#" class="button toggle" id="includeTemplate"><i class="check"></i>Include front/back template</a>
-    <input type="text" id="title"></input>
-    <textarea id="md"></textarea>
+    <input type="text" id="title" placeholder="自定义文件名（可选）"></input>
+    
+    <!-- 预览区域 -->
+    <div class="preview-area">
+        <div class="preview-status" id="previewStatus">
+            <div class="status-icon">📄</div>
+            <div class="status-text">
+                <div class="status-title">准备提取内容</div>
+                <div class="status-desc">点击下方按钮开始提取当前页面内容</div>
+            </div>
+        </div>
+        <div class="content-summary" id="contentSummary" style="display: none;">
+            <div class="summary-header">
+                <span class="summary-title" id="summaryTitle">内容已提取</span>
+                <span class="summary-size" id="summarySize">0 字符</span>
+            </div>
+            <div class="summary-preview" id="summaryPreview">
+                <!-- 内容摘要将显示在这里 -->
+            </div>
+        </div>
+    </div>
+    
     <div class="button-row">
-        <a href="#" class="button" id="download">Download</a>
-        <a href="#" class="button" id="copy">Copy</a>
+        <a href="#" class="button primary" id="extract">📄 提取内容</a>
+        <a href="#" class="button secondary" id="preview" style="display: none;">👁️ 预览</a>
     </div>
     <div class="button-row">
-        <a href="#" class="button" id="downloadSelection">Download selected</a>
-        <a href="#" class="button" id="copySelection">Copy selected</a>
+        <a href="#" class="button" id="download" style="display: none;">⬇️ 下载</a>
+        <a href="#" class="button" id="copy" style="display: none;">📋 复制</a>
+    </div>
+    <div class="button-row">
+        <a href="#" class="button" id="downloadSelection" style="display: none;">⬇️ 下载选中</a>
+        <a href="#" class="button" id="copySelection" style="display: none;">📋 复制选中</a>
     </div>
   </div>
   <div id="batchContainer" style="display: none;">
@@ -55,8 +76,6 @@
 </div>
   <div id="spinner"></div>
   <script type="application/javascript" src="../browser-polyfill.min.js"></script>
-  <script type="application/javascript" src="lib/codemirror.js"></script>
-  <script type="application/javascript" src="lib/modes/markdown/markdown.js"></script>
   <script type="application/javascript" src="popup.js"></script>
 </body>
 

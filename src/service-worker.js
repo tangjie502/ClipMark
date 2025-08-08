@@ -65,6 +65,10 @@ async function handleMessages(message, sender, sendResponse) {
     case "start-link-selection-from-popup":
       await startLinkSelectionFromPopup(message);
       break;
+      
+    case "extract-for-preview":
+      await extractContentForPreview(message);
+      break;
 
     case "forward-get-article-content":
       await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
@@ -1354,6 +1358,68 @@ async function startLinkSelectionFromPopup(message) {
     await startLinkSelectionMode(tab);
   } catch (error) {
     console.error('Error starting link selection from popup:', error);
+  }
+}
+
+/**
+ * Extract content for preview
+ */
+async function extractContentForPreview(message) {
+  try {
+    const tab = await browser.tabs.get(message.tabId);
+    
+    // 确保content scripts已加载
+    await ensureScripts(tab.id);
+    
+    // 创建一个临时的消息监听器来捕获内容
+    const contentPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        browser.runtime.onMessage.removeListener(messageListener);
+        reject(new Error('内容提取超时'));
+      }, 30000);
+      
+      const messageListener = (msg, sender, sendResponse) => {
+        if (msg.type === 'display.md' && sender.tab?.id === tab.id) {
+          clearTimeout(timeout);
+          browser.runtime.onMessage.removeListener(messageListener);
+          resolve(msg);
+        }
+      };
+      
+      browser.runtime.onMessage.addListener(messageListener);
+    });
+    
+    // 触发内容提取
+    await browser.tabs.sendMessage(tab.id, { 
+      type: "get-article-content", 
+      selection: false 
+    });
+    
+    // 等待内容提取完成
+    const contentData = await contentPromise;
+    
+    // 发送提取的内容给popup
+    await browser.runtime.sendMessage({
+      type: "content-extracted",
+      markdown: contentData.markdown,
+      html: contentData.html || '',
+      title: contentData.article?.title || '未命名文档',
+      selection: contentData.selection || '',
+      url: tab.url
+    });
+    
+  } catch (error) {
+    console.error('Error extracting content for preview:', error);
+    
+    // 发送错误消息给popup
+    try {
+      await browser.runtime.sendMessage({
+        type: "content-extracted",
+        error: error.message
+      });
+    } catch (sendError) {
+      console.error('Failed to send error message:', sendError);
+    }
   }
 }
 

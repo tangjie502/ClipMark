@@ -38,27 +38,47 @@ const progressUI = {
     }
 };
 
-const darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-// set up event handlers
-const cm = CodeMirror.fromTextArea(document.getElementById("md"), {
-    theme: darkMode ? "xq-dark" : "xq-light",
-    mode: "markdown",
-    lineWrapping: true
-});
-cm.on("cursorActivity", (cm) => {
-    const somethingSelected = cm.somethingSelected();
-    var downloadSelectionButton = document.getElementById("downloadSelection");
-    var copySelectionButton = document.getElementById("copySelection");
+// 全局变量
+let extractedContent = {
+    markdown: '',
+    html: '',
+    title: '',
+    selection: '',
+    hasSelection: false
+};
 
-    if (somethingSelected) {
-        if(downloadSelectionButton.style.display != "block") downloadSelectionButton.style.display = "block";
-        if(copySelectionButton.style.display != "block") copySelectionButton.style.display = "block";
+// 初始化界面
+function initializeUI() {
+    // 隐藏操作按钮，直到有内容
+    hideActionButtons();
+}
+
+// 隐藏操作按钮
+function hideActionButtons() {
+    const buttons = ['download', 'copy', 'downloadSelection', 'copySelection', 'preview'];
+    buttons.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.style.display = 'none';
+        }
+    });
+}
+
+// 显示操作按钮
+function showActionButtons() {
+    document.getElementById('download').style.display = 'inline-block';
+    document.getElementById('copy').style.display = 'inline-block';
+    document.getElementById('preview').style.display = 'inline-block';
+    
+    if (extractedContent.hasSelection) {
+        document.getElementById('downloadSelection').style.display = 'inline-block';
+        document.getElementById('copySelection').style.display = 'inline-block';
     }
-    else {
-        if(downloadSelectionButton.style.display != "none") downloadSelectionButton.style.display = "none";
-        if(copySelectionButton.style.display != "none") copySelectionButton.style.display = "none";
-    }
-});
+}
+
+// 设置事件监听器
+document.getElementById("extract").addEventListener("click", extractContent);
+document.getElementById("preview").addEventListener("click", openPreview);
 document.getElementById("download").addEventListener("click", download);
 document.getElementById("downloadSelection").addEventListener("click", downloadSelection);
 
@@ -156,6 +176,112 @@ function showLinkSelectionNotification(urlText) {
             }
         }, 5000);
     }
+}
+
+// 提取内容功能
+async function extractContent(e) {
+    e.preventDefault();
+    
+    try {
+        // 显示加载状态
+        updatePreviewStatus('正在提取内容...', '请稍候，正在处理页面内容');
+        
+        // 获取当前标签页
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        if (tabs.length === 0) {
+            throw new Error('无法获取当前标签页');
+        }
+        
+        const currentTab = tabs[0];
+        
+        // 向service worker请求提取内容
+        const response = await browser.runtime.sendMessage({
+            type: "extract-for-preview",
+            tabId: currentTab.id
+        });
+        
+        if (response && response.success) {
+            // 内容提取成功，等待结果
+            // 结果将通过消息机制返回
+        } else {
+            throw new Error('提取内容失败');
+        }
+        
+    } catch (error) {
+        console.error('Extract content error:', error);
+        updatePreviewStatus('提取失败', '请重试或检查页面是否正常加载');
+    }
+}
+
+// 打开预览页面
+async function openPreview(e) {
+    e.preventDefault();
+    
+    if (!extractedContent.markdown) {
+        alert('请先提取内容');
+        return;
+    }
+    
+    try {
+        // 生成唯一的内容ID
+        const contentId = Date.now().toString();
+        
+        // 存储内容到local storage
+        await browser.storage.local.set({
+            [`preview-${contentId}`]: {
+                markdown: extractedContent.markdown,
+                title: extractedContent.title,
+                url: extractedContent.originalUrl || '',
+                timestamp: Date.now()
+            }
+        });
+        
+        // 打开预览页面
+        const previewUrl = browser.runtime.getURL(`preview/preview.html?contentId=${contentId}`);
+        browser.tabs.create({ url: previewUrl });
+        
+        // 关闭弹窗
+        window.close();
+        
+    } catch (error) {
+        console.error('Open preview error:', error);
+        alert('打开预览失败');
+    }
+}
+
+// 更新预览状态
+function updatePreviewStatus(title, description) {
+    document.getElementById('previewStatus').style.display = 'flex';
+    document.getElementById('contentSummary').style.display = 'none';
+    
+    const statusTitle = document.querySelector('.status-title');
+    const statusDesc = document.querySelector('.status-desc');
+    
+    if (statusTitle) statusTitle.textContent = title;
+    if (statusDesc) statusDesc.textContent = description;
+}
+
+// 显示内容摘要
+function showContentSummary(content) {
+    document.getElementById('previewStatus').style.display = 'none';
+    document.getElementById('contentSummary').style.display = 'block';
+    
+    // 更新摘要信息
+    document.getElementById('summarySize').textContent = `${content.markdown.length} 字符`;
+    
+    // 生成预览文本（取前200字符）
+    const previewText = content.markdown
+        .replace(/#+\s/g, '') // 移除标题标记
+        .replace(/\*\*(.*?)\*\*/g, '$1') // 移除粗体标记
+        .replace(/\*(.*?)\*/g, '$1') // 移除斜体标记
+        .replace(/`(.*?)`/g, '$1') // 移除行内代码标记
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // 移除链接，保留文本
+        .substring(0, 200);
+        
+    document.getElementById('summaryPreview').textContent = previewText + (content.markdown.length > 200 ? '...' : '');
+    
+    // 显示操作按钮
+    showActionButtons();
 }
 
 // 启动页面链接选择
@@ -343,7 +469,9 @@ async function handleBatchConversion(e) {
                                 message.article.title = tab.customTitle;
                             }
                             
-                            cm.setValue(message.markdown);
+                            // 在批量处理中，我们不需要显示在编辑器中，直接存储数据
+                            extractedContent.markdown = message.markdown;
+                            extractedContent.title = message.article.title;
                             document.getElementById("title").value = message.article.title;
                             imageList = message.imageList;
                             mdClipsFolder = message.mdClipsFolder;
@@ -357,7 +485,7 @@ async function handleBatchConversion(e) {
 
                 await clipSite(tab.id);
                 await displayMdPromise;
-                await sendDownloadMessage(cm.getValue());
+                await sendDownloadMessage(extractedContent.markdown);
 
             } catch (error) {
                 console.error(`Error processing tab ${tab.id}:`, error);
@@ -588,8 +716,14 @@ function sendDownloadMessage(text) {
 // Download event handler - updated to use promises
 async function download(e) {
     e.preventDefault();
+    
+    if (!extractedContent.markdown) {
+        alert('请先提取内容');
+        return;
+    }
+    
     try {
-        await sendDownloadMessage(cm.getValue());
+        await sendDownloadMessage(extractedContent.markdown);
         window.close();
     } catch (error) {
         console.error("Error sending download message:", error);
@@ -599,20 +733,29 @@ async function download(e) {
 // Download selection handler - updated to use promises
 async function downloadSelection(e) {
     e.preventDefault();
-    if (cm.somethingSelected()) {
-        try {
-            await sendDownloadMessage(cm.getSelection());
-        } catch (error) {
-            console.error("Error sending selection download message:", error);
-        }
+    
+    if (!extractedContent.hasSelection || !extractedContent.selection) {
+        alert('没有选中的内容');
+        return;
+    }
+    
+    try {
+        await sendDownloadMessage(extractedContent.selection);
+    } catch (error) {
+        console.error("Error sending selection download message:", error);
     }
 }
 
 // Function to handle copying text to clipboard
 function copyToClipboard(e) {
     e.preventDefault();
-    const text = cm.getValue();
-    navigator.clipboard.writeText(text).then(() => {
+    
+    if (!extractedContent.markdown) {
+        alert('请先提取内容');
+        return;
+    }
+    
+    navigator.clipboard.writeText(extractedContent.markdown).then(() => {
         showCopySuccess();
     }).catch(err => {
         console.error("Error copying text: ", err);
@@ -621,14 +764,17 @@ function copyToClipboard(e) {
 
 function copySelectionToClipboard(e) {
     e.preventDefault();
-    if (cm.somethingSelected()) {
-        const selectedText = cm.getSelection();
-        navigator.clipboard.writeText(selectedText).then(() => {
-            showCopySuccess();
-        }).catch(err => {
-            console.error("Error copying selection: ", err);
-        });
+    
+    if (!extractedContent.hasSelection || !extractedContent.selection) {
+        alert('没有选中的内容');
+        return;
     }
+    
+    navigator.clipboard.writeText(extractedContent.selection).then(() => {
+        showCopySuccess();
+    }).catch(err => {
+        console.error("Error copying selection: ", err);
+    });
 }
 
 function showCopySuccess() {
@@ -650,19 +796,26 @@ function notify(message) {
     // message for displaying markdown
     if (message.type == "display.md") {
 
-        // set the values from the message
-        //document.getElementById("md").value = message.markdown;
-        cm.setValue(message.markdown);
+        // 更新提取的内容
+        extractedContent.markdown = message.markdown;
+        extractedContent.title = message.article.title;
+        extractedContent.html = message.html || '';
+        extractedContent.selection = message.selection || '';
+        extractedContent.hasSelection = !!(message.selection && message.selection.trim());
+        
         document.getElementById("title").value = message.article.title;
         imageList = message.imageList;
         mdClipsFolder = message.mdClipsFolder;
         
+        // 显示内容摘要
+        showContentSummary(extractedContent);
+        
         // show the hidden elements
         document.getElementById("container").style.display = 'flex';
         document.getElementById("spinner").style.display = 'none';
-         // focus the download button
+        
+        // focus the download button
         document.getElementById("download").focus();
-        cm.refresh();
     }
 }
 
@@ -671,12 +824,49 @@ function showError(err, useEditor = true) {
     document.getElementById("container").style.display = 'flex';
     document.getElementById("spinner").style.display = 'none';
     
+    console.error('Error:', err);
     if (useEditor) {
-        // Original behavior - show error in CodeMirror
-        cm.setValue(`Error clipping the page\n\n${err}`);
+        // 在新的UI中显示错误
+        updatePreviewStatus('提取失败', `错误: ${err}`);
     } else {
-        // Batch processing error - show in CodeMirror but don't disrupt UI
-        const currentContent = cm.getValue();
-        cm.setValue(`${currentContent}\n\nError: ${err}`);
+        // 批量处理错误
+        console.error('Batch processing error:', err);
     }
 }
+
+// 更新消息监听器以处理新的提取内容响应
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === "batch-links-ready") {
+        // 自动填充链接并切换到批量处理界面
+        fillBatchUrls(message.urlText);
+        showBatchProcess({ preventDefault: () => {} });
+        sendResponse({success: true});
+    } else if (message.type === "content-extracted") {
+        // 处理提取的内容
+        handleExtractedContent(message);
+        sendResponse({success: true});
+    }
+    return true;
+});
+
+// 处理提取的内容
+function handleExtractedContent(data) {
+    extractedContent.markdown = data.markdown || '';
+    extractedContent.html = data.html || '';
+    extractedContent.title = data.title || '未命名文档';
+    extractedContent.selection = data.selection || '';
+    extractedContent.hasSelection = !!(data.selection && data.selection.trim());
+    extractedContent.originalUrl = data.url || '';
+    
+    // 更新标题输入框
+    const titleInput = document.getElementById('title');
+    if (titleInput && !titleInput.value) {
+        titleInput.value = extractedContent.title;
+    }
+    
+    // 显示内容摘要
+    showContentSummary(extractedContent);
+}
+
+// 初始化界面
+initializeUI();

@@ -81,7 +81,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["contentScript/pageContext.js"],
+      "resources": ["contentScript/pageContext.js", "preview/preview.html", "preview/preview.css", "preview/preview.js"],
       "matches": ["<all_urls>"]
     }
   ],

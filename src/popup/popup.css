@@ -380,3 +380,102 @@ a.button {
         transform: scale(1);
     }
 }
+
+/* 预览区域样式 */
+.preview-area {
+    margin: 16px 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.preview-status {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    gap: 16px;
+}
+
+.status-icon {
+    font-size: 24px;
+    opacity: 0.7;
+}
+
+.status-text {
+    flex: 1;
+}
+
+.status-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--fg);
+}
+
+.status-desc {
+    font-size: 13px;
+    color: var(--fg-primary);
+    opacity: 0.8;
+}
+
+.content-summary {
+    border-top: 1px solid var(--border);
+}
+
+.summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: rgba(74, 144, 226, 0.05);
+    border-bottom: 1px solid var(--border);
+}
+
+.summary-title {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.summary-size {
+    font-size: 12px;
+    color: var(--fg-primary);
+    background: rgba(74, 144, 226, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+}
+
+.summary-preview {
+    padding: 16px 20px;
+    max-height: 120px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--fg);
+    border-bottom: 1px solid var(--border);
+}
+
+.summary-preview:last-child {
+    border-bottom: none;
+}
+
+/* 按钮主要和次要样式 */
+.button.primary {
+    background: linear-gradient(135deg, var(--primary), #357ABD) !important;
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+.button.primary:hover {
+    background: linear-gradient(135deg, #357ABD, #2969A3) !important;
+}
+
+.button.secondary {
+    background: var(--border) !important;
+    color: var(--fg) !important;
+    border: 1px solid var(--border) !important;
+}
+
+.button.secondary:hover {
+    background: var(--fg-primary) !important;
+    color: var(--bg) !important;
+}
