@@ -10,31 +10,31 @@ async function createMenus() {
     try {
       browser.contextMenus.create({
         id: "download-markdown-tab",
-        title: "Download Tab as Markdown",
+        title: "下载标签页为 Markdown",
         contexts: ["tab"]
       }, () => { });
 
       browser.contextMenus.create({
         id: "tab-download-markdown-alltabs",
-        title: "Download All Tabs as Markdown",
+        title: "下载所有标签页为 Markdown",
         contexts: ["tab"]
       }, () => { });
 
       browser.contextMenus.create({
         id: "copy-tab-as-markdown-link-tab",
-        title: "Copy Tab URL as Markdown Link",
+        title: "复制标签页网址为 Markdown 链接",
         contexts: ["tab"]
       }, () => { });
 
       browser.contextMenus.create({
         id: "copy-tab-as-markdown-link-all-tab",
-        title: "Copy All Tab URLs as Markdown Link List",
+        title: "复制所有标签页网址为 Markdown 链接列表",
         contexts: ["tab"]
       }, () => { });
 
       browser.contextMenus.create({
         id: "copy-tab-as-markdown-link-selected-tab",
-        title: "Copy Selected Tab URLs as Markdown Link List",
+        title: "复制选中标签页网址为 Markdown 链接列表",
         contexts: ["tab"]
       }, () => { });
 
@@ -47,7 +47,7 @@ async function createMenus() {
       browser.contextMenus.create({
         id: "tabtoggle-includeTemplate",
         type: "checkbox",
-        title: "Include front/back template",
+        title: "包含前后模板",
         contexts: ["tab"],
         checked: options.includeTemplate
       }, () => { });
@@ -55,7 +55,7 @@ async function createMenus() {
       browser.contextMenus.create({
         id: "tabtoggle-downloadImages",
         type: "checkbox",
-        title: "Download Images",
+        title: "下载图片",
         contexts: ["tab"],
         checked: options.downloadImages
       }, () => { });
@@ -65,7 +65,7 @@ async function createMenus() {
     // add the download all tabs option to the page context menu as well
     browser.contextMenus.create({
       id: "download-markdown-alltabs",
-      title: "Download All Tabs as Markdown",
+      title: "下载所有标签页为 Markdown",
       contexts: ["all"]
     }, () => { });
     browser.contextMenus.create({
@@ -89,12 +89,12 @@ async function createMenus() {
     // download actions
     browser.contextMenus.create({
       id: "download-markdown-selection",
-      title: "Download Selection As Markdown",
+      title: "下载选中内容为 Markdown",
       contexts: ["selection"]
     }, () => { });
     browser.contextMenus.create({
       id: "download-markdown-all",
-      title: "Download Tab As Markdown",
+      title: "下载标签页为 Markdown",
       contexts: ["all"]
     }, () => { });
 
@@ -107,37 +107,37 @@ async function createMenus() {
     // copy to clipboard actions
     browser.contextMenus.create({
       id: "copy-markdown-selection",
-      title: "Copy Selection As Markdown",
+      title: "复制选中内容为 Markdown",
       contexts: ["selection"]
     }, () => { });
     browser.contextMenus.create({
       id: "copy-markdown-link",
-      title: "Copy Link As Markdown",
+      title: "复制链接为 Markdown",
       contexts: ["link"]
     }, () => { });
     browser.contextMenus.create({
       id: "copy-markdown-image",
-      title: "Copy Image As Markdown",
+      title: "复制图片为 Markdown",
       contexts: ["image"]
     }, () => { });
     browser.contextMenus.create({
       id: "copy-markdown-all",
-      title: "Copy Tab As Markdown",
+      title: "复制标签页为 Markdown",
       contexts: ["all"]
     }, () => { });
     browser.contextMenus.create({
       id: "copy-tab-as-markdown-link",
-      title: "Copy Tab URL as Markdown Link",
+      title: "复制标签页网址为 Markdown 链接",
       contexts: ["all"]
     }, () => { });
     browser.contextMenus.create({
       id: "copy-tab-as-markdown-link-all",
-      title: "Copy All Tab URLs as Markdown Link List",
+      title: "复制所有标签页网址为 Markdown 链接列表",
       contexts: ["all"]
     }, () => { });
     browser.contextMenus.create({
       id: "copy-tab-as-markdown-link-selected",
-      title: "Copy Selected Tab URLs as Markdown Link List",
+      title: "复制选中标签页网址为 Markdown 链接列表",
       contexts: ["all"]
     }, () => { });
   
@@ -151,12 +151,12 @@ async function createMenus() {
       // copy to clipboard actions
       browser.contextMenus.create({
         id: "copy-markdown-obsidian",
-        title: "Send Text selection to Obsidian",
+        title: "发送选中文本到 Obsidian",
         contexts: ["selection"]
       }, () => { });
       browser.contextMenus.create({
         id: "copy-markdown-obsall",
-        title: "Send Tab to Obsidian",
+        title: "发送标签页到 Obsidian",
         contexts: ["all"]
       }, () => { });
     }
@@ -170,7 +170,7 @@ async function createMenus() {
     browser.contextMenus.create({
       id: "toggle-includeTemplate",
       type: "checkbox",
-      title: "Include front/back template",
+      title: "包含前后模板",
       contexts: ["all"],
       checked: options.includeTemplate
     }, () => { });
@@ -178,7 +178,7 @@ async function createMenus() {
     browser.contextMenus.create({
       id: "toggle-downloadImages",
       type: "checkbox",
-      title: "Download Images",
+      title: "下载图片",
       contexts: ["all"],
       checked: options.downloadImages
     }, () => { });

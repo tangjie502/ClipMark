@@ -22,7 +22,7 @@ const progressUI = {
     reset() {
         this.bar.style.width = '0%';
         this.count.textContent = '0/0';
-        this.status.textContent = 'Processing URLs...';
+        this.status.textContent = '正在处理网址...';
         this.currentUrl.textContent = '';
     },
     
