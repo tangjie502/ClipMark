@@ -376,6 +376,36 @@ const linkSelector = window.marksnipLinkSelector = {
             .${this.CSS_CLASSES.panel} .cancel-btn:hover {
                 background: #c82333 !important;
             }
+            
+            .${this.CSS_CLASSES.panel} .select-all-btn {
+                background: #28a745 !important;
+                color: white !important;
+            }
+            
+            .${this.CSS_CLASSES.panel} .select-all-btn:hover {
+                background: #218838 !important;
+            }
+            
+            .${this.CSS_CLASSES.panel} .unselect-all-btn {
+                background: #6c757d !important;
+                color: white !important;
+            }
+            
+            .${this.CSS_CLASSES.panel} .unselect-all-btn:hover {
+                background: #5a6268 !important;
+            }
+            
+            .${this.CSS_CLASSES.panel} .select-all-btn:disabled {
+                background: #6c757d !important;
+                cursor: not-allowed !important;
+                opacity: 0.6 !important;
+            }
+            
+            .${this.CSS_CLASSES.panel} .unselect-all-btn:disabled {
+                background: #6c757d !important;
+                cursor: not-allowed !important;
+                opacity: 0.6 !important;
+            }
         `
         
         document.head.appendChild(style)
@@ -420,6 +450,10 @@ const linkSelector = window.marksnipLinkSelector = {
                 再次点击可取消选择，按 <strong>ESC</strong> 退出
             </div>
             <div style="margin-top: 12px;">
+                <button id="select-all-links" class="select-all-btn">全选</button>
+                <button id="unselect-all-links" class="unselect-all-btn">取消全选</button>
+            </div>
+            <div style="margin-top: 8px;">
                 <button id="finish-selection" disabled>选择完毕</button>
                 <button id="cancel-selection" class="cancel-btn">取消</button>
             </div>
@@ -436,6 +470,14 @@ const linkSelector = window.marksnipLinkSelector = {
         panel.querySelector('#cancel-selection').addEventListener('click', () => {
             this.disable()
         })
+        
+        panel.querySelector('#select-all-links').addEventListener('click', () => {
+            this.selectAllLinks()
+        })
+        
+        panel.querySelector('#unselect-all-links').addEventListener('click', () => {
+            this.unselectAllLinks()
+        })
     },
     
     // 更新浮动面板显示
@@ -444,9 +486,22 @@ const linkSelector = window.marksnipLinkSelector = {
         
         const countElement = this.floatingPanel.querySelector('#selected-count')
         const finishButton = this.floatingPanel.querySelector('#finish-selection')
+        const selectAllButton = this.floatingPanel.querySelector('#select-all-links')
+        const unselectAllButton = this.floatingPanel.querySelector('#unselect-all-links')
         
-        countElement.textContent = this.selectedLinks.size
-        finishButton.disabled = this.selectedLinks.size === 0
+        const selectedCount = this.selectedLinks.size
+        const totalCount = this.allSelectableLinks.length
+        
+        countElement.textContent = selectedCount
+        finishButton.disabled = selectedCount === 0
+        
+        // 根据选择状态更新按钮可用性
+        selectAllButton.disabled = selectedCount === totalCount
+        unselectAllButton.disabled = selectedCount === 0
+        
+        // 更新按钮文本以显示状态
+        selectAllButton.textContent = selectedCount === totalCount ? '已全选' : `全选 (${totalCount})`
+        unselectAllButton.textContent = selectedCount === 0 ? '取消全选' : `取消全选 (${selectedCount})`
     },
     
     // 事件监听器
@@ -507,6 +562,30 @@ const linkSelector = window.marksnipLinkSelector = {
         }
         
         this.updatePanel()
+    },
+    
+    // 全选所有链接
+    selectAllLinks() {
+        this.allSelectableLinks.forEach(link => {
+            if (!this.selectedLinks.has(link)) {
+                this.selectedLinks.add(link)
+                link.classList.add(this.CSS_CLASSES.selected)
+            }
+        })
+        
+        this.updatePanel()
+        console.log(`MarkSnip: 已全选 ${this.selectedLinks.size} 个链接`)
+    },
+    
+    // 取消全选所有链接
+    unselectAllLinks() {
+        this.selectedLinks.forEach(link => {
+            link.classList.remove(this.CSS_CLASSES.selected)
+        })
+        
+        this.selectedLinks.clear()
+        this.updatePanel()
+        console.log('MarkSnip: 已取消全选')
     },
     
     // 完成选择
