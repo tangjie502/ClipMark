@@ -18,7 +18,20 @@ class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         os_log(.default, "Received message from browser.runtime.sendNativeMessage: %@", message as! CVarArg)
 
         let response = NSExtensionItem()
-        response.userInfo = [ SFExtensionMessageKey: [ "Response to": message ] ]
+        
+        // Handle different message types from ClipMark extension
+        if let messageDict = message as? [String: Any] {
+            switch messageDict["type"] as? String {
+            case "download-complete":
+                response.userInfo = [ SFExtensionMessageKey: [ "status": "success", "message": "Download completed" ] ]
+            case "error":
+                response.userInfo = [ SFExtensionMessageKey: [ "status": "error", "message": "Processing error" ] ]
+            default:
+                response.userInfo = [ SFExtensionMessageKey: [ "status": "received", "response": "Message processed by Safari extension" ] ]
+            }
+        } else {
+            response.userInfo = [ SFExtensionMessageKey: [ "Response to": message ] ]
+        }
 
         context.completeRequest(returningItems: [response], completionHandler: nil)
     }

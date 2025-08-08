@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="modernGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ec4899;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="170" fill="url(#modernGrad)"/>
+  <circle cx="256" cy="256" r="149" fill="white" opacity="0.1"/>
+  <rect x="170" y="213" width="128" height="85" rx="8" fill="white" opacity="0.9"/>
+  <rect x="192" y="235" width="85" height="11" fill="url(#modernGrad)"/>
+  <rect x="192" y="256" width="64" height="11" fill="url(#modernGrad)"/>
+  <rect x="192" y="277" width="75" height="11" fill="url(#modernGrad)"/>
+  <path d="M320 256 L384 256 M352 213 L384 256 L352 299" stroke="white" stroke-width="21" fill="none" stroke-linecap="round"/>
+  <text x="256" y="426" font-family="Monaco, monospace" font-size="85" fill="white" text-anchor="middle">#MD</text>
+</svg>
