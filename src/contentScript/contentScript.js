@@ -200,7 +200,7 @@ function downloadImage(filename, url) {
 
 // 防止重复声明
 if (typeof window.marksnipLinkSelector !== 'undefined') {
-    console.log('MarkSnip: Link selector already exists, skipping initialization');
+                console.log('ClipMark: Link selector already exists, skipping initialization');
 } else {
 
 // 链接选择状态管理
@@ -240,7 +240,7 @@ const linkSelector = window.marksnipLinkSelector = {
         // 添加页面遮罩
         this.addPageOverlay()
         
-        console.log('MarkSnip: 链接选择模式已启用')
+                    console.log('ClipMark: 链接选择模式已启用')
     },
     
     // 禁用链接选择模式
@@ -255,7 +255,7 @@ const linkSelector = window.marksnipLinkSelector = {
         // 清理DOM
         this.cleanup()
         
-        console.log('MarkSnip: 链接选择模式已禁用')
+                    console.log('ClipMark: 链接选择模式已禁用')
     },
     
     // 添加CSS样式
@@ -425,7 +425,7 @@ const linkSelector = window.marksnipLinkSelector = {
             }
         })
         
-        console.log(`MarkSnip: 找到 ${this.allSelectableLinks.length} 个可选链接`)
+                    console.log(`ClipMark: 找到 ${this.allSelectableLinks.length} 个可选链接`)
     },
     
     // 添加页面遮罩
@@ -574,7 +574,7 @@ const linkSelector = window.marksnipLinkSelector = {
         })
         
         this.updatePanel()
-        console.log(`MarkSnip: 已全选 ${this.selectedLinks.size} 个链接`)
+                    console.log(`ClipMark: 已全选 ${this.selectedLinks.size} 个链接`)
     },
     
     // 取消全选所有链接
@@ -585,7 +585,7 @@ const linkSelector = window.marksnipLinkSelector = {
         
         this.selectedLinks.clear()
         this.updatePanel()
-        console.log('MarkSnip: 已取消全选')
+        console.log('ClipMark: 已取消全选')
     },
     
     // 完成选择

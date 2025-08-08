@@ -394,7 +394,7 @@ class MarkdownPreview {
         document.getElementById('lastUpdated').textContent = '刚刚更新';
         
         if (this.originalUrl) {
-            document.title = `${this.documentTitle} - MarkSnip 预览`;
+            document.title = `${this.documentTitle} - ClipMark 预览`;
         }
     }
     

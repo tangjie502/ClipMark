@@ -1,19 +1,19 @@
-# MarkSnip Testing Guide
+# ClipMark Testing Guide
 
-This guide explains how to set up and run the test suite for the MarkSnip extension. The tests verify the core functionality of converting HTML to Markdown.
+This guide explains how to set up and run the test suite for the ClipMark extension. The tests verify the core functionality of converting HTML to Markdown.
 
 ## Prerequisites
 
 You'll need:
 - Python 3.x (to run a local server)
 - A modern web browser (Chrome, Firefox, etc.)
-- The MarkSnip source code
+- The ClipMark source code
 
 ## Directory Structure
 
 Ensure your project has the following structure:
 ```
-marksnip/
+clipmark/
 ├── src/
 │   ├── background/
 │   │   ├── turndown.js
@@ -32,7 +32,7 @@ marksnip/
 1. **Open Terminal/Command Prompt**
    Navigate to your project root directory (where both `src` and `tests` folders are located):
    ```bash
-   cd path/to/marksnip
+   cd path/to/clipmark
    ```
 
 2. **Start Local Server**

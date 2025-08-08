@@ -1,8 +1,8 @@
-# MarkSnip - Markdown Web Clipper
+# ClipMark - Markdown Web Clipper
 
-## [MarkSnip Chrome Extension Link](https://chromewebstore.google.com/detail/marksnip-markdown-web-cli/kcbaglhfgbkjdnpeokaamjjkddempipm?hl=en)
+## [ClipMark Chrome Extension Link](https://chromewebstore.google.com/detail/marksnip-markdown-web-cli/kcbaglhfgbkjdnpeokaamjjkddempipm?hl=en)
 
-MarkSnip is a powerful browser extension that helps you save web content in clean, formatted Markdown. Forked from the excellent [MarkDownload](https://github.com/deathau/markdownload/) extension, MarkSnip has been updated to Manifest V3 to comply with Chrome Extension Store requirements while adding enhanced features like improved table formatting, cleaner code blocks, and better overall readability.
+ClipMark is a powerful browser extension that helps you save web content in clean, formatted Markdown. Forked from the excellent [MarkDownload](https://github.com/deathau/markdownload/) extension, ClipMark has been updated to Manifest V3 to comply with Chrome Extension Store requirements while adding enhanced features like improved table formatting, cleaner code blocks, and better overall readability.
 
 ## Features
 
@@ -19,7 +19,7 @@ MarkSnip is a powerful browser extension that helps you save web content in clea
 
 ## For Developers
 
-As a developer, documentation is crucial to your workflow. MarkSnip streamlines the process of saving technical documentation for use with Large Language Models (LLMs) and other development tools:
+As a developer, documentation is crucial to your workflow. ClipMark streamlines the process of saving technical documentation for use with Large Language Models (LLMs) and other development tools:
 
 - **One-Click Documentation Export**: Instead of manually copying sections of API documentation, code examples, and explanations, capture entire documentation pages with a single click - complete with proper code block formatting and syntax highlighting.
 
@@ -85,7 +85,7 @@ As a developer, documentation is crucial to your workflow. MarkSnip streamlines 
 ## User Guide
 
 1. **Basic Clipping**
-   - Click the MarkSnip icon in your browser toolbar
+   - Click the ClipMark icon in your browser toolbar
    - Choose between clipping the entire page or selected text
    - Edit the generated Markdown if needed
    - Click "Download" to save as a .md file
@@ -121,24 +121,24 @@ As a developer, documentation is crucial to your workflow. MarkSnip streamlines 
 
 ## Obsidian Integration
 
-MarkSnip supports direct integration with Obsidian via the Advanced URI plugin. To use this feature:
+ClipMark supports direct integration with Obsidian via the Advanced URI plugin. To use this feature:
 
 1. Install and enable the [Advanced Obsidian URI](https://vinzent03.github.io/obsidian-advanced-uri/) plugin in Obsidian
-2. Configure your vault and folder settings in MarkSnip's options
+2. Configure your vault and folder settings in ClipMark's options
 3. Use the "Copy to Obsidian" context menu option or keyboard shortcut
 
 The Advanced URI plugin helps bypass URL character limitations by using the clipboard as the source for creating new files.
 
 ## Keyboard Shortcuts
 
-- Alt+Shift+M: Open MarkSnip popup
+- Alt+Shift+M: Open ClipMark popup
 - Alt+Shift+D: Download current tab as Markdown
 - Alt+Shift+C: Copy current tab as Markdown
 - Alt+Shift+L: Copy current tab URL as Markdown link
 
 ## External Libraries
 
-MarkSnip relies on several open-source libraries:
+ClipMark relies on several open-source libraries:
 
 - [Readability.js](https://github.com/mozilla/readability) by Mozilla for content extraction
 - [Turndown](https://github.com/mixmark-io/turndown) for HTML to Markdown conversion

@@ -1337,7 +1337,7 @@ async function handleBatchLinksSelected(message) {
       color: '#007acc'
     });
     await browser.action.setTitle({
-      title: `MarkSnip - 正在处理 ${selectedLinks.length} 个链接...`
+                  title: `ClipMark - 正在处理 ${selectedLinks.length} 个链接...`
     });
     
     console.log('Starting batch conversion process...');
@@ -1459,7 +1459,7 @@ async function handleBatchLinksSelected(message) {
       
       // 清除徽章
       await browser.action.setBadgeText({ text: '' });
-      await browser.action.setTitle({ title: 'MarkSnip' });
+              await browser.action.setTitle({ title: 'ClipMark' });
       
       console.log('Direct batch conversion complete, opened preview');
 
@@ -1469,7 +1469,7 @@ async function handleBatchLinksSelected(message) {
       // 清除处理状态
       await browser.action.setBadgeText({ text: '!' });
       await browser.action.setBadgeBackgroundColor({ color: '#dc3545' });
-      await browser.action.setTitle({ title: `MarkSnip - 处理失败: ${error.message}` });
+              await browser.action.setTitle({ title: `ClipMark - 处理失败: ${error.message}` });
     }
     
   } catch (error) {

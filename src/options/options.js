@@ -276,7 +276,7 @@ const buttonClick = (e) => {
         browser.downloads.download({
             url: url,
             saveAs: true,
-            filename: `MarkSnip-export-${datestring}.json`
+            filename: `ClipMark-export-${datestring}.json`
         });
     }
 }

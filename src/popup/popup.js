@@ -702,7 +702,7 @@ browser.storage.sync.get(defaultOptions).then(options => {
             files: ["/contentScript/contentScript.js"]
         });
     }).then(() => {
-        console.info("Successfully injected MarkSnip content script");
+                        console.info("Successfully injected ClipMark content script");
         return clipSite(id);
     }).catch((error) => {
         console.error(error);

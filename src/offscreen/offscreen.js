@@ -11,7 +11,7 @@ browser.runtime.sendMessage({ type: 'offscreen-ready' });
  * Initialize offscreen document
  */
 function initOffscreen() {
-  console.log('MarkSnip offscreen document initialized');
+  console.log('ClipMark offscreen document initialized');
   TurndownService.prototype.defaultEscape = TurndownService.prototype.escape;
 }
 
