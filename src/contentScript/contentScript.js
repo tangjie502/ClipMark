@@ -198,8 +198,13 @@ function downloadImage(filename, url) {
 // 链接选择功能 (Link Selection Feature)
 // ========================================
 
+// 防止重复声明
+if (typeof window.marksnipLinkSelector !== 'undefined') {
+    console.log('MarkSnip: Link selector already exists, skipping initialization');
+} else {
+
 // 链接选择状态管理
-const linkSelector = {
+const linkSelector = window.marksnipLinkSelector = {
     isActive: false,
     selectedLinks: new Set(),
     allSelectableLinks: [],
@@ -558,11 +563,18 @@ const linkSelector = {
 }
 
 // 监听来自扩展的消息
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === "start-link-selection") {
-        linkSelector.enable()
-        sendResponse({success: true})
-    }
+if (!window.marksnipMessageListenerAdded) {
+    window.marksnipMessageListenerAdded = true;
     
-    return true // 保持消息通道开放
-})
+    browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.type === "start-link-selection") {
+            (window.marksnipLinkSelector || linkSelector).enable()
+            return Promise.resolve({success: true})
+        }
+        
+        // 对于其他消息类型，返回false表示不处理
+        return false
+    })
+}
+
+} // 结束防重复声明的if语句

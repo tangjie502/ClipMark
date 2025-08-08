@@ -79,8 +79,13 @@ async function handleMessages(message, sender, sendResponse) {
       break;
   }
   
-  // 返回 true 表示我们会异步处理响应
-  return true;
+  // 对于需要异步处理响应的消息类型，使用Promise
+  if (message.type === "extract-for-preview") {
+    return true; // 这个消息类型需要异步处理
+  }
+  
+  // 其他消息类型不需要响应
+  return false;
 }
 
 /**
@@ -673,7 +678,9 @@ async function ensureScripts(tabId) {
       const results = await browser.scripting.executeScript({
           target: { tabId: tabId },
           func: () => {
-              return typeof getSelectionAndDom === 'function' && typeof browser !== 'undefined';
+              return typeof getSelectionAndDom === 'function' && 
+                     typeof browser !== 'undefined' &&
+                     typeof window.marksnipLinkSelector !== 'undefined';
           }
       });
       
@@ -694,12 +701,15 @@ async function ensureScripts(tabId) {
           func: () => {
               return {
                   hasPolyfill: typeof browser !== 'undefined',
-                  hasContentScript: typeof getSelectionAndDom === 'function'
+                  hasContentScript: typeof getSelectionAndDom === 'function',
+                  hasLinkSelector: typeof window.marksnipLinkSelector !== 'undefined'
               };
           }
       });
 
-      if (!verification[0]?.result?.hasPolyfill || !verification[0]?.result?.hasContentScript) {
+      if (!verification[0]?.result?.hasPolyfill || 
+          !verification[0]?.result?.hasContentScript || 
+          !verification[0]?.result?.hasLinkSelector) {
           throw new Error('Script injection verification failed');
       }
 
@@ -1311,44 +1321,283 @@ async function handleBatchLinksSelected(message) {
       return;
     }
     
-    console.log(`Processing ${selectedLinks.length} selected links`);
+    console.log(`Starting direct batch conversion for ${selectedLinks.length} selected links`);
     
-    // Create a formatted list of URLs for the batch processor
-    const urlText = selectedLinks.map(link => {
-      // If the link has a title, format as markdown link
-      if (link.text && link.text.trim()) {
-        return `[${link.text.trim()}](${link.url})`;
-      } else {
-        // Just return the URL
-        return link.url;
-      }
-    }).join('\n');
+    // 转换为URL对象格式（兼容批量转换逻辑）
+    const urlObjects = selectedLinks.map(link => ({
+      url: link.url,
+      title: link.text && link.text.trim() ? link.text.trim() : null
+    }));
     
-    // Get the current active tab to send the batch processing data to popup
-    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-    if (tabs.length > 0) {
-      // Store the selected URLs for the popup to access
-      await browser.storage.local.set({
-        'batch-selected-links': {
-          urlText: urlText,
-          timestamp: Date.now()
-        }
-      });
+    // 设置处理状态徽章
+    await browser.action.setBadgeText({
+      text: '...'
+    });
+    await browser.action.setBadgeBackgroundColor({
+      color: '#007acc'
+    });
+    await browser.action.setTitle({
+      title: `MarkSnip - 正在处理 ${selectedLinks.length} 个链接...`
+    });
+    
+    console.log('Starting batch conversion process...');
+    
+    try {
+      const tabs = [];
+      const total = urlObjects.length;
+      let current = 0;
+      const collectedMarkdown = [];
       
-      // Try to notify popup if it's open (this will fail silently if popup is closed)
-      try {
-        await browser.runtime.sendMessage({
-          type: "batch-links-ready",
-          urlText: urlText
+      // 创建并加载所有标签页
+      for (const urlObj of urlObjects) {
+        current++;
+        console.log(`Loading ${current}/${total}: ${urlObj.url}`);
+        
+        const tab = await browser.tabs.create({ 
+          url: urlObj.url, 
+          active: false 
         });
-      } catch (error) {
-        // Popup is not open, that's fine - data is stored for later
-        console.log('Popup not open, data stored for later use');
+        
+        if (urlObj.title) {
+          tab.customTitle = urlObj.title;
+        }
+        
+        tabs.push(tab);
+        
+        // 等待标签页加载
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error(`Timeout loading ${urlObj.url}`));
+          }, 30000);
+          
+          function listener(tabId, info) {
+            if (tabId === tab.id && info.status === 'complete') {
+              clearTimeout(timeout);
+              browser.tabs.onUpdated.removeListener(listener);
+              console.log(`Tab ${tabId} loaded`);
+              resolve();
+            }
+          }
+          browser.tabs.onUpdated.addListener(listener);
+        });
+
+        // 确保脚本已注入
+        await browser.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["/browser-polyfill.min.js", "/contentScript/contentScript.js"]
+        });
       }
+
+      // 重置计数器，开始转换阶段
+      current = 0;
+      console.log('Converting pages to Markdown...');
+      
+      // 处理每个标签页并收集markdown
+      for (const tab of tabs) {
+        try {
+          current++;
+          console.log(`Converting ${current}/${total}: ${tab.url}`);
+          
+          // 使用请求ID系统来跟踪特定的处理请求
+          const requestId = `batch-${Date.now()}-${tab.id}`;
+          
+          const displayMdPromise = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Timeout waiting for markdown generation'));
+            }, 30000);
+
+            // 监听 markdown-result 消息（来自 offscreen 处理）
+            function markdownResultListener(message) {
+              if (message.type === "markdown-result" && message.requestId === requestId) {
+                clearTimeout(timeout);
+                browser.runtime.onMessage.removeListener(markdownResultListener);
+                console.log(`Received markdown result for tab ${tab.id}`);
+                
+                const title = tab.customTitle || message.result.article.title || tab.url;
+                const markdown = message.result.markdown || '';
+                
+                // 收集markdown内容
+                collectedMarkdown.push({
+                  title: title,
+                  url: tab.url,
+                  markdown: markdown
+                });
+                
+                resolve();
+              }
+            }
+            
+            browser.runtime.onMessage.addListener(markdownResultListener);
+          });
+
+          // 使用直接的 offscreen 处理方式
+          await triggerContentExtractionWithRequestId(tab.id, requestId);
+          await displayMdPromise;
+
+        } catch (error) {
+          console.error(`Error processing tab ${tab.id}:`, error);
+          
+          // 即使出错也添加占位符，保持处理连续性
+          collectedMarkdown.push({
+            title: `Error: ${tab.url}`,
+            url: tab.url,
+            markdown: `# Error\n\n无法转换此页面: ${error.message}\n\nURL: ${tab.url}\n\n---\n\n`
+          });
+        }
+      }
+
+      // 清理标签页
+      console.log('Cleaning up tabs...');
+      await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
+
+      // 合并所有 markdown 内容
+      const mergedMarkdown = mergeMarkdownDocuments(collectedMarkdown);
+      const mergedTitle = `批量转换文档集合 (${collectedMarkdown.length}个文档)`;
+      
+      // 直接跳转到预览界面
+      await openBatchPreviewFromBackground(mergedMarkdown, mergedTitle);
+      
+      // 清除徽章
+      await browser.action.setBadgeText({ text: '' });
+      await browser.action.setTitle({ title: 'MarkSnip' });
+      
+      console.log('Direct batch conversion complete, opened preview');
+
+    } catch (error) {
+      console.error('Batch processing error:', error);
+      
+      // 清除处理状态
+      await browser.action.setBadgeText({ text: '!' });
+      await browser.action.setBadgeBackgroundColor({ color: '#dc3545' });
+      await browser.action.setTitle({ title: `MarkSnip - 处理失败: ${error.message}` });
     }
     
   } catch (error) {
     console.error('Error handling batch links selected:', error);
+  }
+}
+
+/**
+ * Merge multiple markdown documents into one
+ */
+function mergeMarkdownDocuments(markdownArray) {
+  if (markdownArray.length === 0) {
+    return '# 批量转换结果\n\n暂无内容\n';
+  }
+  
+  // 创建目录
+  let toc = '# 批量转换文档集合\n\n## 目录\n\n';
+  let content = '\n\n---\n\n';
+  
+  markdownArray.forEach((doc, index) => {
+    const sectionNum = index + 1;
+    const cleanTitle = doc.title.replace(/[#]/g, ''); // 移除可能的markdown标题符号
+    
+    // 添加到目录
+    toc += `${sectionNum}. [${cleanTitle}](#section-${sectionNum})\n`;
+    
+    // 添加内容部分
+    content += `## ${sectionNum}. ${cleanTitle} {#section-${sectionNum}}\n\n`;
+    content += `**来源：** ${doc.url}\n\n`;
+    
+    if (doc.markdown && doc.markdown.trim()) {
+      // 调整内容中的标题级别，避免与主标题冲突
+      const adjustedMarkdown = doc.markdown.replace(/^(#{1,6})/gm, (match, hashes) => {
+        return '##' + hashes; // 在现有标题前添加两个#
+      });
+      content += adjustedMarkdown;
+    } else {
+      content += '*内容为空或转换失败*';
+    }
+    
+    content += '\n\n---\n\n';
+  });
+  
+  // 添加统计信息
+  const stats = `\n\n## 转换统计\n\n- **文档数量：** ${markdownArray.length}\n- **转换时间：** ${new Date().toLocaleString()}\n- **成功转换：** ${markdownArray.filter(doc => doc.markdown && doc.markdown.trim()).length}\n\n`;
+  
+  return toc + content + stats;
+}
+
+/**
+ * Trigger content extraction for a tab with request ID tracking
+ */
+async function triggerContentExtractionWithRequestId(tabId, requestId) {
+  try {
+    // Ensure scripts are injected
+    await ensureScripts(tabId);
+    
+    // Execute script to get DOM and selection
+    const results = await browser.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        if (typeof getSelectionAndDom === 'function') {
+          return getSelectionAndDom();
+        }
+        return null;
+      }
+    });
+    
+    if (results && results[0]?.result) {
+      // Get options for processing
+      const options = await getOptions();
+      
+      // Always use offscreen document for consistent processing
+      await ensureOffscreenDocumentExists();
+      
+      // Send to offscreen for processing with request ID
+      await browser.runtime.sendMessage({
+        target: 'offscreen',
+        type: 'process-content',
+        requestId: requestId,
+        data: {
+          type: "clip",
+          dom: results[0].result.dom,
+          selection: results[0].result.selection,
+          clipSelection: false // 批量处理不使用选择
+        },
+        tabId: tabId,
+        options: options
+      });
+      
+      console.log(`Content extraction triggered for tab ${tabId} with requestId ${requestId}`);
+    } else {
+      throw new Error('Failed to get content from tab');
+    }
+  } catch (error) {
+    console.error(`Error triggering content extraction for tab ${tabId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Open batch preview from background script
+ */
+async function openBatchPreviewFromBackground(mergedMarkdown, title) {
+  try {
+    // 生成唯一的内容ID
+    const contentId = `batch-${Date.now()}`;
+    
+    // 存储合并后的内容到local storage
+    await browser.storage.local.set({
+      [`preview-${contentId}`]: {
+        markdown: mergedMarkdown,
+        title: title,
+        url: '批量转换',
+        timestamp: Date.now(),
+        isBatch: true  // 标记这是批量转换结果
+      }
+    });
+    
+    // 打开预览页面
+    const previewUrl = browser.runtime.getURL(`preview/preview.html?contentId=${contentId}`);
+    await browser.tabs.create({ url: previewUrl });
+    
+    console.log(`Batch preview opened with contentId: ${contentId}`);
+    
+  } catch (error) {
+    console.error('Open batch preview from background error:', error);
+    throw error;
   }
 }
 

@@ -31,11 +31,16 @@ async function handleMessages(message, sender) {
           article.content = message.selection;
         }
         
-        // Send the article back to service worker
+        // Convert to markdown
+        const { markdown, imageList } = await convertArticleToMarkdown(article, null, defaultOptions);
+        
+        // Send the complete result back to service worker
         await browser.runtime.sendMessage({
           type: 'article-result',
           requestId: message.requestId,
-          article: article
+          article: article,
+          markdown: markdown,
+          imageList: imageList
         });
       } catch (error) {
         console.error('Error processing article DOM:', error);

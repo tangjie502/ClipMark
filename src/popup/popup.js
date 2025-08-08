@@ -48,9 +48,12 @@ let extractedContent = {
 };
 
 // 初始化界面
-function initializeUI() {
+async function initializeUI() {
     // 隐藏操作按钮，直到有内容
     hideActionButtons();
+    
+    // 检查是否有存储的提取内容
+    await checkForStoredContent();
 }
 
 // 隐藏操作按钮
@@ -98,19 +101,11 @@ document.getElementById("selectFromPage").addEventListener("click", startPageLin
 
 // 链接选择功能集成
 document.addEventListener('DOMContentLoaded', async () => {
-    await checkForStoredLinks();
+    // 批量链接处理现在直接在 service worker 中完成，不需要在弹窗中检查
+    await checkForStoredContent();
 });
 
-// 监听来自service worker的消息
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === "batch-links-ready") {
-        // 自动填充链接并切换到批量处理界面
-        fillBatchUrls(message.urlText);
-        showBatchProcess({ preventDefault: () => {} });
-        sendResponse({success: true});
-    }
-    return true;
-});
+// 注意：消息监听器在文件后面统一处理
 
 function showBatchProcess(e) {
     e.preventDefault();
@@ -124,25 +119,7 @@ function hideBatchProcess(e) {
     document.getElementById("batchContainer").style.display = 'none';
 }
 
-// 检查是否有存储的链接数据
-async function checkForStoredLinks() {
-    try {
-        const result = await browser.storage.local.get(['batch-selected-links']);
-        if (result['batch-selected-links']) {
-            const data = result['batch-selected-links'];
-            // 检查数据是否过期（5分钟）
-            if (Date.now() - data.timestamp < 5 * 60 * 1000) {
-                // 数据仍然有效，显示提示
-                showLinkSelectionNotification(data.urlText);
-            } else {
-                // 清除过期数据
-                await browser.storage.local.remove(['batch-selected-links']);
-            }
-        }
-    } catch (error) {
-        console.error('Error checking stored links:', error);
-    }
-}
+// 注意：批量链接处理现在直接在 service worker 中完成，不需要弹窗处理
 
 // 填充批量处理URL文本框
 function fillBatchUrls(urlText) {
@@ -152,39 +129,29 @@ function fillBatchUrls(urlText) {
     }
 }
 
-// 显示链接选择提示
-function showLinkSelectionNotification(urlText) {
-    // 在批量处理按钮旁边添加一个小提示
-    const batchButton = document.getElementById("batchProcess");
-    if (batchButton && !document.getElementById('link-selection-indicator')) {
-        const indicator = document.createElement('span');
-        indicator.id = 'link-selection-indicator';
-        indicator.innerHTML = ' 🔗';
-        indicator.title = '有已选择的链接可用于批量处理';
-        indicator.style.cssText = `
-            color: #28a745;
-            font-size: 16px;
-            cursor: pointer;
-        `;
-        
-        indicator.addEventListener('click', () => {
-            fillBatchUrls(urlText);
-            showBatchProcess({ preventDefault: () => {} });
-            indicator.remove();
-        });
-        
-        batchButton.parentNode.insertBefore(indicator, batchButton.nextSibling);
-        
-        // 5秒后自动移除提示
-        setTimeout(() => {
-            if (indicator.parentNode) {
-                indicator.remove();
+// 批量链接选择现在直接在 service worker 中处理完成
+
+// 检查是否有存储的提取内容
+async function checkForStoredContent() {
+    try {
+        const result = await browser.storage.local.get(['extracted-content']);
+        if (result['extracted-content']) {
+            const data = result['extracted-content'];
+            // 检查数据是否过期（5分钟）
+            if (Date.now() - data.timestamp < 5 * 60 * 1000) {
+                // 数据仍然有效，自动显示内容
+                handleExtractedContent(data);
+                // 清除已使用的数据
+                await browser.storage.local.remove(['extracted-content']);
+            } else {
+                // 清除过期数据
+                await browser.storage.local.remove(['extracted-content']);
             }
-        }, 5000);
+        }
+    } catch (error) {
+        console.error('Error checking stored content:', error);
     }
 }
-
-
 
 // 打开预览页面
 async function openPreview(e) {
@@ -372,6 +339,7 @@ async function handleBatchConversion(e) {
         const tabs = [];
         const total = urlObjects.length;
         let current = 0;
+        const collectedMarkdown = []; // 收集所有转换的 markdown
         
         console.log('Starting batch conversion...');
         
@@ -420,7 +388,7 @@ async function handleBatchConversion(e) {
         current = 0;
         progressUI.setStatus('Converting pages to Markdown...');
         
-        // Process each tab
+        // Process each tab and collect markdown
         for (const tab of tabs) {
             try {
                 current++;
@@ -438,16 +406,15 @@ async function handleBatchConversion(e) {
                             browser.runtime.onMessage.removeListener(messageListener);
                             console.log(`Received markdown for tab ${tab.id}`);
                             
-                            if (tab.customTitle) {
-                                message.article.title = tab.customTitle;
-                            }
+                            const title = tab.customTitle || message.article.title || tab.url;
+                            const markdown = message.markdown || '';
                             
-                            // 在批量处理中，我们不需要显示在编辑器中，直接存储数据
-                            extractedContent.markdown = message.markdown;
-                            extractedContent.title = message.article.title;
-                            document.getElementById("title").value = message.article.title;
-                            imageList = message.imageList;
-                            mdClipsFolder = message.mdClipsFolder;
+                            // 收集markdown内容，不直接下载
+                            collectedMarkdown.push({
+                                title: title,
+                                url: tab.url,
+                                markdown: markdown
+                            });
                             
                             resolve();
                         }
@@ -458,32 +425,113 @@ async function handleBatchConversion(e) {
 
                 await clipSite(tab.id);
                 await displayMdPromise;
-                await sendDownloadMessage(extractedContent.markdown);
+                // 移除下载调用，改为收集内容
+                // await sendDownloadMessage(extractedContent.markdown);
 
             } catch (error) {
                 console.error(`Error processing tab ${tab.id}:`, error);
                 progressUI.setStatus(`Error: ${error.message}`);
                 await new Promise(resolve => setTimeout(resolve, 2000)); // Show error briefly
+                
+                // 即使出错也添加占位符，保持处理连续性
+                collectedMarkdown.push({
+                    title: `Error: ${tab.url}`,
+                    url: tab.url,
+                    markdown: `# Error\n\n无法转换此页面: ${error.message}\n\nURL: ${tab.url}\n\n---\n\n`
+                });
             }
         }
 
         // Clean up tabs
-        progressUI.setStatus('Cleaning up...');
+        progressUI.setStatus('Merging documents...');
         console.log('Cleaning up tabs...');
         await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
 
-        progressUI.setStatus('Complete!');
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Show completion briefly
+        // 合并所有 markdown 内容
+        const mergedMarkdown = mergeMarkdownDocuments(collectedMarkdown);
+        const mergedTitle = `批量转换文档集合 (${collectedMarkdown.length}个文档)`;
         
-        console.log('Batch conversion complete');
-        hideBatchProcess(e);
-        window.close();
+        // 跳转到预览界面而不是关闭
+        await openBatchPreview(mergedMarkdown, mergedTitle);
+        
+        progressUI.setStatus('Complete!');
+        console.log('Batch conversion complete, redirecting to preview...');
 
     } catch (error) {
         console.error('Batch processing error:', error);
         progressUI.setStatus(`Error: ${error.message}`);
         document.getElementById("spinner").style.display = 'none';
         document.getElementById("convertUrls").style.display = 'block';
+    }
+}
+
+// 合并多个 markdown 文档为一个文档
+function mergeMarkdownDocuments(markdownArray) {
+    if (markdownArray.length === 0) {
+        return '# 批量转换结果\n\n暂无内容\n';
+    }
+    
+    // 创建目录
+    let toc = '# 批量转换文档集合\n\n## 目录\n\n';
+    let content = '\n\n---\n\n';
+    
+    markdownArray.forEach((doc, index) => {
+        const sectionNum = index + 1;
+        const cleanTitle = doc.title.replace(/[#]/g, ''); // 移除可能的markdown标题符号
+        
+        // 添加到目录
+        toc += `${sectionNum}. [${cleanTitle}](#section-${sectionNum})\n`;
+        
+        // 添加内容部分
+        content += `## ${sectionNum}. ${cleanTitle} {#section-${sectionNum}}\n\n`;
+        content += `**来源：** ${doc.url}\n\n`;
+        
+        if (doc.markdown && doc.markdown.trim()) {
+            // 调整内容中的标题级别，避免与主标题冲突
+            const adjustedMarkdown = doc.markdown.replace(/^(#{1,6})/gm, (match, hashes) => {
+                return '##' + hashes; // 在现有标题前添加两个#
+            });
+            content += adjustedMarkdown;
+        } else {
+            content += '*内容为空或转换失败*';
+        }
+        
+        content += '\n\n---\n\n';
+    });
+    
+    // 添加统计信息
+    const stats = `\n\n## 转换统计\n\n- **文档数量：** ${markdownArray.length}\n- **转换时间：** ${new Date().toLocaleString()}\n- **成功转换：** ${markdownArray.filter(doc => doc.markdown && doc.markdown.trim()).length}\n\n`;
+    
+    return toc + content + stats;
+}
+
+// 打开批量预览界面
+async function openBatchPreview(mergedMarkdown, title) {
+    try {
+        // 生成唯一的内容ID
+        const contentId = `batch-${Date.now()}`;
+        
+        // 存储合并后的内容到local storage
+        await browser.storage.local.set({
+            [`preview-${contentId}`]: {
+                markdown: mergedMarkdown,
+                title: title,
+                url: '批量转换',
+                timestamp: Date.now(),
+                isBatch: true  // 标记这是批量转换结果
+            }
+        });
+        
+        // 打开预览页面
+        const previewUrl = browser.runtime.getURL(`preview/preview.html?contentId=${contentId}`);
+        await browser.tabs.create({ url: previewUrl });
+        
+        // 关闭弹窗
+        window.close();
+        
+    } catch (error) {
+        console.error('Open batch preview error:', error);
+        alert('打开预览失败: ' + error.message);
     }
 }
 
@@ -809,17 +857,14 @@ function showError(err, useEditor = true) {
 
 // 更新消息监听器以处理新的提取内容响应
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === "batch-links-ready") {
-        // 自动填充链接并切换到批量处理界面
-        fillBatchUrls(message.urlText);
-        showBatchProcess({ preventDefault: () => {} });
-        sendResponse({success: true});
-    } else if (message.type === "content-extracted") {
+    if (message.type === "content-extracted") {
         // 处理提取的内容
         handleExtractedContent(message);
-        sendResponse({success: true});
+        return Promise.resolve({success: true});
     }
-    return true;
+    
+    // 对于其他消息类型，返回false表示不处理
+    return false;
 });
 
 // 处理提取的内容
