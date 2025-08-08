@@ -115,7 +115,7 @@ async function executeScriptInTab(tabId, codeString) {
  */
 async function getTabContentForOffscreen(tabId, selection, requestId) {
   try {
-    console.log(`Getting tab content for ${tabId}`);
+
     await ensureScripts(tabId);
     
     const results = await browser.scripting.executeScript({
@@ -129,10 +129,10 @@ async function getTabContentForOffscreen(tabId, selection, requestId) {
       }
     });
     
-    console.log(`Script execution results for tab ${tabId}:`, results);
+    
     
     if (results && results[0]?.result) {
-      console.log(`Sending content result for tab ${tabId}`);
+  
       await browser.runtime.sendMessage({
         type: 'article-content-result',
         requestId: requestId,
@@ -223,7 +223,7 @@ async function handleImageDownloads(message) {
   const { imageList, mdClipsFolder, title, options } = message;
   
   try {
-    console.log('Service worker handling image downloads:', Object.keys(imageList).length, 'images');
+  
     
     // Calculate the destination path for images
     const destPath = mdClipsFolder + title.substring(0, title.lastIndexOf('/'));
@@ -232,7 +232,7 @@ async function handleImageDownloads(message) {
     // Download each image
     for (const [src, filename] of Object.entries(imageList)) {
       try {
-        console.log('Downloading image:', src, '->', filename);
+    
         
         const imgId = await browser.downloads.download({
           url: src,
@@ -243,14 +243,14 @@ async function handleImageDownloads(message) {
         // Track the download
         activeDownloads.set(imgId, src);
         
-        console.log('Image download started:', imgId, filename);
+
       } catch (imgErr) {
         console.error('Failed to download image:', src, imgErr);
         // Continue with other images even if one fails
       }
     }
     
-    console.log('All image downloads initiated');
+  
   } catch (error) {
     console.error('Error handling image downloads:', error);
   }
@@ -263,7 +263,7 @@ async function handleImageDownloadsContentScript(message) {
   const { imageList, tabId, options } = message;
   
   try {
-    console.log('Service worker handling image downloads via content script');
+  
     
     // For content script method, we need to convert images to data URIs
     // and trigger downloads through the content script
@@ -293,7 +293,7 @@ async function handleImageDownloadsContentScript(message) {
         };
         
         reader.readAsDataURL(blob);
-        console.log('Image processed for content script download:', filename);
+  
       } catch (imgErr) {
         console.error('Failed to process image for content script:', src, imgErr);
       }
@@ -457,7 +457,7 @@ function downloadListener(id, url) {
 function handleDownloadChange(delta) {
   if (activeDownloads.has(delta.id)) {
     if (delta.state && delta.state.current === "complete") {
-      console.log('Download completed:', delta.id);
+  
       const url = activeDownloads.get(delta.id);
       if (url.startsWith('blob:')) {
         URL.revokeObjectURL(url);
@@ -1299,7 +1299,7 @@ async function startLinkSelectionMode(tab) {
     });
     
     if (response && response.success) {
-      console.log('Link selection mode started successfully');
+  
     } else {
       console.error('Failed to start link selection mode');
     }
@@ -1317,11 +1317,11 @@ async function handleBatchLinksSelected(message) {
     const selectedLinks = message.links;
     
     if (!selectedLinks || selectedLinks.length === 0) {
-      console.log('No links selected');
+  
       return;
     }
     
-    console.log(`Starting direct batch conversion for ${selectedLinks.length} selected links`);
+
     
     // 转换为URL对象格式（兼容批量转换逻辑）
     const urlObjects = selectedLinks.map(link => ({
@@ -1340,7 +1340,7 @@ async function handleBatchLinksSelected(message) {
                   title: `ClipMark - 正在处理 ${selectedLinks.length} 个链接...`
     });
     
-    console.log('Starting batch conversion process...');
+
     
     try {
       const tabs = [];
@@ -1351,7 +1351,7 @@ async function handleBatchLinksSelected(message) {
       // 创建并加载所有标签页
       for (const urlObj of urlObjects) {
         current++;
-        console.log(`Loading ${current}/${total}: ${urlObj.url}`);
+
         
       const tab = await browser.tabs.create({ 
           url: urlObj.url, 
@@ -1374,7 +1374,7 @@ async function handleBatchLinksSelected(message) {
           if (tabId === tab.id && info.status === 'complete') {
             clearTimeout(timeout);
             browser.tabs.onUpdated.removeListener(listener);
-              console.log(`Tab ${tabId} loaded`);
+      
             resolve();
           }
         }
@@ -1390,13 +1390,13 @@ async function handleBatchLinksSelected(message) {
 
       // 重置计数器，开始转换阶段
       current = 0;
-      console.log('Converting pages to Markdown...');
+
       
       // 处理每个标签页并收集markdown
       for (const tab of tabs) {
         try {
           current++;
-          console.log(`Converting ${current}/${total}: ${tab.url}`);
+  
           
           // 使用请求ID系统来跟踪特定的处理请求
           const requestId = `batch-${Date.now()}-${tab.id}`;
@@ -1411,7 +1411,7 @@ async function handleBatchLinksSelected(message) {
               if (message.type === "markdown-result" && message.requestId === requestId) {
             clearTimeout(timeout);
                 browser.runtime.onMessage.removeListener(markdownResultListener);
-                console.log(`Received markdown result for tab ${tab.id}`);
+      
                 
                 const title = tab.customTitle || message.result.article.title || tab.url;
                 const markdown = message.result.markdown || '';
@@ -1447,7 +1447,7 @@ async function handleBatchLinksSelected(message) {
       }
 
       // 清理标签页
-      console.log('Cleaning up tabs...');
+
       await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
 
       // 合并所有 markdown 内容
@@ -1461,7 +1461,7 @@ async function handleBatchLinksSelected(message) {
       await browser.action.setBadgeText({ text: '' });
               await browser.action.setTitle({ title: 'ClipMark' });
       
-      console.log('Direct batch conversion complete, opened preview');
+
 
     } catch (error) {
       console.error('Batch processing error:', error);
@@ -1528,7 +1528,7 @@ async function triggerContentExtractionWithRequestId(tabId, requestId) {
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      console.log(`Content extraction attempt ${attempt + 1}/${maxRetries} for tab ${tabId}`);
+
       
       // Check if tab still exists
       try {
@@ -1599,7 +1599,7 @@ async function triggerContentExtractionWithRequestId(tabId, requestId) {
           options: options
         });
         
-        console.log(`Content extraction triggered successfully for tab ${tabId} with requestId ${requestId}`);
+    
         return; // Success, exit the retry loop
       } else {
         const errorMsg = results?.[0]?.result?.error || 'Failed to get content from tab';
@@ -1645,7 +1645,7 @@ async function openBatchPreviewFromBackground(mergedMarkdown, title) {
     const previewUrl = browser.runtime.getURL(`preview/preview.html?contentId=${contentId}`);
     await browser.tabs.create({ url: previewUrl });
     
-    console.log(`Batch preview opened with contentId: ${contentId}`);
+
     
   } catch (error) {
     console.error('Open batch preview from background error:', error);

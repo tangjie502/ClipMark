@@ -145,7 +145,7 @@ async function processContextMenu(message) {
  * Handle context menu download action
  */
 async function handleContextMenuDownload(info, tabId, providedOptions = null) {
-  console.log(`Starting download for tab ${tabId}`);
+  
   try {
     const options = providedOptions || defaultOptions;
     
@@ -157,12 +157,12 @@ async function handleContextMenuDownload(info, tabId, providedOptions = null) {
       throw new Error(`Failed to get valid article content from tab ${tabId}`);
     }
 
-    console.log(`Got article for tab ${tabId}, processing...`);
+    
     const title = await formatTitle(article, options);
     const { markdown, imageList } = await convertArticleToMarkdown(article, null, options);
     const mdClipsFolder = await formatMdClipsFolder(article, options);
     
-    console.log(`Downloading markdown for tab ${tabId}`);
+    
     await downloadMarkdown(markdown, title, tabId, imageList, mdClipsFolder, options);
     
     // Signal completion
@@ -344,8 +344,8 @@ function getCodeLanguage(node) {
  * Turndown HTML to Markdown conversion
  */
 function turndown(content, options, article) {
-  console.log("Starting turndown with options:", options.tableFormatting); // Debug log
-  console.log("Using article baseURI:", article.baseURI); // Debug baseURI
+
+
 
   // Initialize imageList for collecting images
   let imageList = {};
@@ -819,7 +819,7 @@ async function getArticleFromDom(domString, options) {
   const baseMatch = domString.match(/<base[^>]*href=["']([^"']+)["'][^>]*>/i);
   if (baseMatch) {
     originalBaseURI = baseMatch[1];
-    console.log('Extracted base URI from DOM string:', originalBaseURI);
+  
   }
   
   // If we have an original base URI, make sure the parsed DOM uses it
@@ -830,7 +830,7 @@ async function getArticleFromDom(domString, options) {
       dom.head.prepend(baseElement);
     }
     baseElement.setAttribute('href', originalBaseURI);
-    console.log('Set base element href to:', originalBaseURI);
+
   }
   
   // Now options is defined
@@ -934,7 +934,7 @@ async function getArticleFromDom(domString, options) {
  article.baseURI = originalBaseURI || dom.baseURI;
  article.pageTitle = dom.title;
  
- console.log('Using baseURI for article:', article.baseURI);
+ 
  
  // Extract URL information
  const url = new URL(article.baseURI);
@@ -972,13 +972,13 @@ async function getArticleFromDom(domString, options) {
 */
 async function getArticleFromContent(tabId, selection = false, options = null) {  // Add options parameter
   try {
-    console.log(`Getting article content for tab ${tabId}`);
+  
     const requestId = Date.now().toString(36) + Math.random().toString(36).substring(2);
     
     const resultPromise = new Promise((resolve, reject) => {
       const messageListener = (message) => {
         if (message.type === 'article-content-result' && message.requestId === requestId) {
-          console.log(`Received article content result for tab ${tabId}:`, message);
+  
           browser.runtime.onMessage.removeListener(messageListener);
           if (message.error) {
             reject(new Error(message.error));
@@ -1008,7 +1008,7 @@ async function getArticleFromContent(tabId, selection = false, options = null) {
       throw new Error(`Missing DOM content for tab ${tabId}`);
     }
     
-    console.log(`Processing DOM content for tab ${tabId}`);
+  
     return await getArticleFromDom(article.dom, options);  // Pass options here
   } catch (error) {
     console.error(`Error getting content from tab ${tabId}:`, error);
@@ -1292,7 +1292,7 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
 
      // FIXED: Delegate image downloads to service worker instead of handling here
      if (options.downloadImages && Object.keys(imageList).length > 0) {
-       console.log('Delegating image downloads to service worker:', Object.keys(imageList).length, 'images');
+     
        
        // Send image download request to service worker
        await browser.runtime.sendMessage({

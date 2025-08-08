@@ -341,14 +341,14 @@ async function handleBatchConversion(e) {
         let current = 0;
         const collectedMarkdown = []; // 收集所有转换的 markdown
         
-        console.log('Starting batch conversion...');
+    
         
         // Create and load all tabs
         for (const urlObj of urlObjects) {
             current++;
             progressUI.updateProgress(current, total, `Loading: ${urlObj.url}`);
             
-            console.log(`Creating tab for ${urlObj.url}`);
+    
             const tab = await browser.tabs.create({ 
                 url: urlObj.url, 
                 active: false 
@@ -370,7 +370,7 @@ async function handleBatchConversion(e) {
                     if (tabId === tab.id && info.status === 'complete') {
                         clearTimeout(timeout);
                         browser.tabs.onUpdated.removeListener(listener);
-                        console.log(`Tab ${tabId} loaded`);
+                
                         resolve();
                     }
                 }
@@ -393,7 +393,7 @@ async function handleBatchConversion(e) {
             try {
                 current++;
                 progressUI.updateProgress(current, total, `Converting: ${tab.url}`);
-                console.log(`Processing tab ${tab.id}`);
+          
                 
                 const displayMdPromise = new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => {
@@ -404,7 +404,7 @@ async function handleBatchConversion(e) {
                         if (message.type === "display.md") {
                             clearTimeout(timeout);
                             browser.runtime.onMessage.removeListener(messageListener);
-                            console.log(`Received markdown for tab ${tab.id}`);
+                    
                             
                             const title = tab.customTitle || message.article.title || tab.url;
                             const markdown = message.markdown || '';
@@ -444,7 +444,7 @@ async function handleBatchConversion(e) {
 
         // Clean up tabs
         progressUI.setStatus('Merging documents...');
-        console.log('Cleaning up tabs...');
+    
         await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
 
         // 合并所有 markdown 内容
@@ -455,7 +455,7 @@ async function handleBatchConversion(e) {
         await openBatchPreview(mergedMarkdown, mergedTitle);
         
         progressUI.setStatus('Complete!');
-        console.log('Batch conversion complete, redirecting to preview...');
+
 
     } catch (error) {
         console.error('Batch processing error:', error);

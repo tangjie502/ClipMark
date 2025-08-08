@@ -266,7 +266,7 @@ const buttonClick = (e) => {
         document.getElementById("import-file").click();
     }
     else if (e.target.id == "export") {
-        console.log("export");
+    
         const json = JSON.stringify(options, null, 2);
         var blob = new Blob([json], { type: "text/json" });
         var url = URL.createObjectURL(blob);
@@ -446,7 +446,7 @@ function handleClose() {
         }
     } catch (error) {
         // 如果无法关闭窗口，导航到扩展管理页面或显示消息
-        console.log('无法关闭窗口，尝试其他方式');
+
         
         // 尝试导航到chrome扩展页面（仅Chrome）
         if (navigator.userAgent.includes('Chrome')) {

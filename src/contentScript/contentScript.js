@@ -148,7 +148,6 @@ function downloadImage(filename, url) {
     var link = document.createElement('a');
     link.download = filename.substring(0, filename.lastIndexOf('.'));
     link.href = url;
-    console.log(link);
     link.click();
     */
 
@@ -157,12 +156,12 @@ function downloadImage(filename, url) {
     xhr.open('GET', url, true);
     xhr.responseType = 'blob';
     xhr.onload = () => {
-        console.log('onload!')
+
         var file = new Blob([xhr.response], {type: 'application/octet-stream'});
         var link = document.createElement('a');
         link.download = filename;//.substring(0, filename.lastIndexOf('.'));
         link.href = window.URL.createObjectURL(file);
-        console.log(link);
+
         link.click();
     }
     xhr.send();
@@ -182,7 +181,7 @@ function downloadImage(filename, url) {
         const ext = filename.substring(filename.lastIndexOf('.'));
         link.download = filename;
         link.href = canvas.toDataURL(`image/png`);
-        console.log(link);
+
         link.click();
     }
     */
@@ -240,7 +239,7 @@ const linkSelector = window.marksnipLinkSelector = {
         // 添加页面遮罩
         this.addPageOverlay()
         
-                    console.log('ClipMark: 链接选择模式已启用')
+            
     },
     
     // 禁用链接选择模式
@@ -255,7 +254,7 @@ const linkSelector = window.marksnipLinkSelector = {
         // 清理DOM
         this.cleanup()
         
-                    console.log('ClipMark: 链接选择模式已禁用')
+            
     },
     
     // 添加CSS样式
@@ -425,7 +424,7 @@ const linkSelector = window.marksnipLinkSelector = {
             }
         })
         
-                    console.log(`ClipMark: 找到 ${this.allSelectableLinks.length} 个可选链接`)
+            
     },
     
     // 添加页面遮罩
@@ -574,7 +573,7 @@ const linkSelector = window.marksnipLinkSelector = {
         })
         
         this.updatePanel()
-                    console.log(`ClipMark: 已全选 ${this.selectedLinks.size} 个链接`)
+            
     },
     
     // 取消全选所有链接
@@ -585,7 +584,7 @@ const linkSelector = window.marksnipLinkSelector = {
         
         this.selectedLinks.clear()
         this.updatePanel()
-        console.log('ClipMark: 已取消全选')
+
     },
     
     // 完成选择

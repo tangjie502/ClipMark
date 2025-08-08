@@ -447,7 +447,7 @@ class MarkdownPreview {
             }, 3000);
         } else {
             // 如果没有状态栏，在控制台显示消息
-            console.log('Preview Status:', message);
+    
         }
     }
 }
