@@ -73,6 +73,18 @@ async function createMenus() {
       type: "separator",
       contexts: ["all"]
     }, () => { });
+    
+    // 链接选择功能菜单项
+    browser.contextMenus.create({
+      id: "start-link-selection",
+      title: "📎 选择页面链接进行批量处理",
+      contexts: ["all"]
+    }, () => { });
+    browser.contextMenus.create({
+      id: "separator-link-selection",
+      type: "separator",
+      contexts: ["all"]
+    }, () => { });
 
     // download actions
     browser.contextMenus.create({

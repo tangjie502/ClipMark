@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MarkSnip 链接选择功能测试页面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        .link-group {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007acc;
+        }
+        .link-group h3 {
+            margin-top: 0;
+            color: #007acc;
+        }
+        a {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        a:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        .instructions {
+            background: #e8f5e8;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #28a745;
+        }
+        .instructions h3 {
+            color: #28a745;
+            margin-top: 0;
+        }
+        .instructions ol {
+            margin: 10px 0;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ffeaa7;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 MarkSnip 链接选择功能测试</h1>
+        
+        <div class="instructions">
+            <h3>📋 使用说明</h3>
+            <ol>
+                <li>确保已安装并启用 MarkSnip 浏览器扩展</li>
+                <li>右键点击页面，选择 "📎 选择页面链接进行批量处理"</li>
+                <li>或者点击扩展弹窗中的 "batch" 按钮，然后点击 "📎 从页面选择链接"</li>
+                <li>页面将进入链接选择模式，所有可选链接会被蓝色虚线框标记</li>
+                <li>按住 <strong>Command (Mac)</strong> 或 <strong>Ctrl (Windows/Linux)</strong> + 鼠标左键点击链接进行选择</li>
+                <li>选中的链接会变成绿色高亮，并显示 ✓ 标识</li>
+                <li>右上角浮动面板实时显示已选择的链接数量</li>
+                <li>选择完毕后点击 "选择完毕" 按钮</li>
+                <li>扩展会自动打开批量处理界面，并填充选中的链接</li>
+            </ol>
+        </div>
+
+        <div class="warning">
+            <strong>⚠️ 注意：</strong>
+            如果功能不工作，请检查浏览器控制台是否有错误信息，并确保扩展已正确加载。
+        </div>
+
+        <h2>🌐 测试链接组</h2>
+        
+        <div class="link-group">
+            <h3>技术文档</h3>
+            <a href="https://developer.mozilla.org/en-US/docs/Web/API" target="_blank">MDN Web APIs</a>
+            <a href="https://nodejs.org/en/docs/" target="_blank">Node.js Documentation</a>
+            <a href="https://reactjs.org/docs/getting-started.html" target="_blank">React Documentation</a>
+            <a href="https://vuejs.org/guide/" target="_blank">Vue.js Guide</a>
+            <a href="https://angular.io/docs" target="_blank">Angular Documentation</a>
+        </div>
+
+        <div class="link-group">
+            <h3>开发工具</h3>
+            <a href="https://github.com" target="_blank">GitHub</a>
+            <a href="https://stackoverflow.com" target="_blank">Stack Overflow</a>
+            <a href="https://codepen.io" target="_blank">CodePen</a>
+            <a href="https://jsfiddle.net" target="_blank">JSFiddle</a>
+            <a href="https://codesandbox.io" target="_blank">CodeSandbox</a>
+        </div>
+
+        <div class="link-group">
+            <h3>学习资源</h3>
+            <a href="https://www.freecodecamp.org" target="_blank">freeCodeCamp</a>
+            <a href="https://www.codecademy.com" target="_blank">Codecademy</a>
+            <a href="https://www.udemy.com" target="_blank">Udemy</a>
+            <a href="https://coursera.org" target="_blank">Coursera</a>
+            <a href="https://edx.org" target="_blank">edX</a>
+        </div>
+
+        <div class="link-group">
+            <h3>新闻和博客</h3>
+            <a href="https://techcrunch.com" target="_blank">TechCrunch</a>
+            <a href="https://arstechnica.com" target="_blank">Ars Technica</a>
+            <a href="https://www.theverge.com" target="_blank">The Verge</a>
+            <a href="https://hackernews.com" target="_blank">Hacker News</a>
+            <a href="https://medium.com" target="_blank">Medium</a>
+        </div>
+
+        <div class="link-group">
+            <h3>设计和 UI</h3>
+            <a href="https://dribbble.com" target="_blank">Dribbble</a>
+            <a href="https://behance.net" target="_blank">Behance</a>
+            <a href="https://figma.com" target="_blank">Figma</a>
+            <a href="https://sketch.com" target="_blank">Sketch</a>
+            <a href="https://adobe.com" target="_blank">Adobe Creative Suite</a>
+        </div>
+        
+        <h2>📝 功能特点验证</h2>
+        <ul>
+            <li>✅ 多选链接支持</li>
+            <li>✅ 跨平台修饰键支持 (Command/Ctrl)</li>
+            <li>✅ 视觉反馈（高亮和选中标识）</li>
+            <li>✅ 实时计数显示</li>
+            <li>✅ 选择状态切换（再次点击取消选择）</li>
+            <li>✅ ESC 键退出功能</li>
+            <li>✅ 与现有批量处理功能集成</li>
+            <li>✅ 自动填充选中链接到批量处理界面</li>
+        </ul>
+
+        <p style="margin-top: 40px; text-align: center; color: #7f8c8d;">
+            <strong>测试完成后，请删除此测试页面</strong>
+        </p>
+    </div>
+</body>
+</html>

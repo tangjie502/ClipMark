@@ -34,7 +34,10 @@
   </div>
   <div id="batchContainer" style="display: none;">
     <h2 class="batch-title">Batch Processing</h2>
-    <textarea id="urlList" placeholder="Enter URLs to convert (one per line)&#10;Example:&#10;https://example.com/page1&#10;https://example.com/page2"></textarea>
+    <div class="button-row">
+        <a href="#" class="button link-selector-btn" id="selectFromPage">📎 从页面选择链接</a>
+    </div>
+    <textarea id="urlList" placeholder="Enter URLs to convert (one per line)&#10;Or use the button above to select from current page&#10;Example:&#10;https://example.com/page1&#10;https://example.com/page2"></textarea>
     <div class="button-row">
         <a href="#" class="button" id="convertUrls">Convert All</a>
         <a href="#" class="button" id="cancelBatch">Cancel</a>

@@ -341,3 +341,42 @@ a.button {
     background-position: center;
     background-size: 12px;
 }
+
+/* 链接选择按钮样式 */
+.link-selector-btn {
+    background: linear-gradient(135deg, #28a745, #20c997) !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3) !important;
+}
+
+.link-selector-btn:hover {
+    background: linear-gradient(135deg, #218838, #1ea080) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.4) !important;
+}
+
+.link-selector-btn:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3) !important;
+}
+
+/* 链接选择指示器样式 */
+#link-selection-indicator {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}

@@ -57,6 +57,14 @@ async function handleMessages(message, sender, sendResponse) {
     case "get-tab-content":
       await getTabContentForOffscreen(message.tabId, message.selection, message.requestId);
       break;
+      
+    case "batch-links-selected":
+      await handleBatchLinksSelected(message);
+      break;
+      
+    case "start-link-selection-from-popup":
+      await startLinkSelectionFromPopup(message);
+      break;
 
     case "forward-get-article-content":
       await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
@@ -490,6 +498,10 @@ async function handleContextMenuClick(info, tab) {
   // Copy single tab as markdown link
   else if (info.menuItemId === "copy-tab-as-markdown-link") {
     await copyTabAsMarkdownLink(tab);
+  }
+  // Start link selection mode
+  else if (info.menuItemId === "start-link-selection") {
+    await startLinkSelectionMode(tab);
   }
   // A settings toggle command
   else if (info.menuItemId.startsWith("toggle-") || info.menuItemId.startsWith("tabtoggle-")) {
@@ -1253,6 +1265,95 @@ async function downloadMarkdown(markdown, title, tabId, imageList = {}, mdClipsF
     } catch (error) {
       console.error("Failed to execute script:", error);
     }
+  }
+}
+
+/**
+ * Start link selection mode in the current tab
+ */
+async function startLinkSelectionMode(tab) {
+  try {
+    // Ensure content scripts are loaded
+    await ensureScripts(tab.id);
+    
+    // Send message to content script to start link selection
+    const response = await browser.tabs.sendMessage(tab.id, {
+      type: "start-link-selection"
+    });
+    
+    if (response && response.success) {
+      console.log('Link selection mode started successfully');
+    } else {
+      console.error('Failed to start link selection mode');
+    }
+    
+  } catch (error) {
+    console.error('Error starting link selection mode:', error);
+  }
+}
+
+/**
+ * Handle batch links selected from content script
+ */
+async function handleBatchLinksSelected(message) {
+  try {
+    const selectedLinks = message.links;
+    
+    if (!selectedLinks || selectedLinks.length === 0) {
+      console.log('No links selected');
+      return;
+    }
+    
+    console.log(`Processing ${selectedLinks.length} selected links`);
+    
+    // Create a formatted list of URLs for the batch processor
+    const urlText = selectedLinks.map(link => {
+      // If the link has a title, format as markdown link
+      if (link.text && link.text.trim()) {
+        return `[${link.text.trim()}](${link.url})`;
+      } else {
+        // Just return the URL
+        return link.url;
+      }
+    }).join('\n');
+    
+    // Get the current active tab to send the batch processing data to popup
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tabs.length > 0) {
+      // Store the selected URLs for the popup to access
+      await browser.storage.local.set({
+        'batch-selected-links': {
+          urlText: urlText,
+          timestamp: Date.now()
+        }
+      });
+      
+      // Try to notify popup if it's open (this will fail silently if popup is closed)
+      try {
+        await browser.runtime.sendMessage({
+          type: "batch-links-ready",
+          urlText: urlText
+        });
+      } catch (error) {
+        // Popup is not open, that's fine - data is stored for later
+        console.log('Popup not open, data stored for later use');
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error handling batch links selected:', error);
+  }
+}
+
+/**
+ * Start link selection from popup request
+ */
+async function startLinkSelectionFromPopup(message) {
+  try {
+    const tab = await browser.tabs.get(message.tabId);
+    await startLinkSelectionMode(tab);
+  } catch (error) {
+    console.error('Error starting link selection from popup:', error);
   }
 }
 

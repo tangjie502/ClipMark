@@ -3,3 +3,8 @@ xcode/MarkDownload - Markdown Web Clipper/MarkDownload - Markdown Web Clipper.xc
 xcode/MarkDownload - Markdown Web Clipper/MarkDownload - Markdown Web Clipper.xcodeproj/xcuserdata
 .DS_Store
 node_modules
+.cursor/rules/browser-extension.mdc
+.cursor/rules/javascript-style.mdc
+.cursor/rules/messaging-api.mdc
+.cursor/rules/project-structure.mdc
+.cursor/rules/ui-components.mdc

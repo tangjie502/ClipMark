@@ -68,6 +68,23 @@ document.getElementById("copySelection").addEventListener("click", copySelection
 document.getElementById("batchProcess").addEventListener("click", showBatchProcess);
 document.getElementById("convertUrls").addEventListener("click", handleBatchConversion);
 document.getElementById("cancelBatch").addEventListener("click", hideBatchProcess);
+document.getElementById("selectFromPage").addEventListener("click", startPageLinkSelection);
+
+// 链接选择功能集成
+document.addEventListener('DOMContentLoaded', async () => {
+    await checkForStoredLinks();
+});
+
+// 监听来自service worker的消息
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === "batch-links-ready") {
+        // 自动填充链接并切换到批量处理界面
+        fillBatchUrls(message.urlText);
+        showBatchProcess({ preventDefault: () => {} });
+        sendResponse({success: true});
+    }
+    return true;
+});
 
 function showBatchProcess(e) {
     e.preventDefault();
@@ -79,6 +96,95 @@ function hideBatchProcess(e) {
     e.preventDefault();
     document.getElementById("container").style.display = 'flex';
     document.getElementById("batchContainer").style.display = 'none';
+}
+
+// 检查是否有存储的链接数据
+async function checkForStoredLinks() {
+    try {
+        const result = await browser.storage.local.get(['batch-selected-links']);
+        if (result['batch-selected-links']) {
+            const data = result['batch-selected-links'];
+            // 检查数据是否过期（5分钟）
+            if (Date.now() - data.timestamp < 5 * 60 * 1000) {
+                // 数据仍然有效，显示提示
+                showLinkSelectionNotification(data.urlText);
+            } else {
+                // 清除过期数据
+                await browser.storage.local.remove(['batch-selected-links']);
+            }
+        }
+    } catch (error) {
+        console.error('Error checking stored links:', error);
+    }
+}
+
+// 填充批量处理URL文本框
+function fillBatchUrls(urlText) {
+    const urlTextarea = document.getElementById("urlList");
+    if (urlTextarea) {
+        urlTextarea.value = urlText;
+    }
+}
+
+// 显示链接选择提示
+function showLinkSelectionNotification(urlText) {
+    // 在批量处理按钮旁边添加一个小提示
+    const batchButton = document.getElementById("batchProcess");
+    if (batchButton && !document.getElementById('link-selection-indicator')) {
+        const indicator = document.createElement('span');
+        indicator.id = 'link-selection-indicator';
+        indicator.innerHTML = ' 🔗';
+        indicator.title = '有已选择的链接可用于批量处理';
+        indicator.style.cssText = `
+            color: #28a745;
+            font-size: 16px;
+            cursor: pointer;
+        `;
+        
+        indicator.addEventListener('click', () => {
+            fillBatchUrls(urlText);
+            showBatchProcess({ preventDefault: () => {} });
+            indicator.remove();
+        });
+        
+        batchButton.parentNode.insertBefore(indicator, batchButton.nextSibling);
+        
+        // 5秒后自动移除提示
+        setTimeout(() => {
+            if (indicator.parentNode) {
+                indicator.remove();
+            }
+        }, 5000);
+    }
+}
+
+// 启动页面链接选择
+async function startPageLinkSelection(e) {
+    e.preventDefault();
+    
+    try {
+        // 获取当前活动标签页
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        if (tabs.length === 0) {
+            showError('无法获取当前标签页', false);
+            return;
+        }
+        
+        const currentTab = tabs[0];
+        
+        // 向service worker发送启动链接选择的请求
+        await browser.runtime.sendMessage({
+            type: "start-link-selection-from-popup",
+            tabId: currentTab.id
+        });
+        
+        // 关闭popup让用户在页面上进行选择
+        window.close();
+        
+    } catch (error) {
+        console.error('Error starting link selection:', error);
+        showError('启动链接选择失败', false);
+    }
 }
 
 const defaultOptions = {
