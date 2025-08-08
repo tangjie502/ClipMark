@@ -6,7 +6,7 @@
 
 **🚀 强大的网页剪藏工具，轻松将网页内容转换为Markdown格式**
 
-[![Version](https://img.shields.io/badge/version-3.7.0-blue.svg)](https://github.com/yourusername/clipmark-extension)
+[![Version](https://img.shields.io/badge/version-3.7.0-blue.svg)](https://github.com/tangjie502/clipmark-extension)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-orange.svg)](https://chromewebstore.google.com/detail/marksnip-markdown-web-cli/kcbaglhfgbkjdnpeokaamjjkddempipm?hl=en)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-brightgreen.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -74,7 +74,7 @@
 
 1. **下载源码**
    ```bash
-   git clone https://github.com/yourusername/clipmark-extension.git
+   git clone https://github.com/tang'jie/clipmark-extension.git
    cd clipmark-extension
    ```
 
@@ -215,7 +215,7 @@ ClipMark/
 
 1. **克隆仓库**
    ```bash
-   git clone https://github.com/yourusername/clipmark-extension.git
+   git clone https://github.com/tangjie502/clipmark-extension.git
    cd clipmark-extension
    ```
 
@@ -250,7 +250,7 @@ ClipMark/
 我们欢迎所有形式的贡献！
 
 ### 🐛 报告问题
-- 使用[GitHub Issues](https://github.com/yourusername/clipmark-extension/issues)
+- 使用[GitHub Issues](https://github.com/tangjie502/clipmark-extension/issues)
 - 请提供详细的复现步骤和环境信息
 
 ### 💡 功能建议
@@ -303,8 +303,8 @@ ClipMark基于以下优秀的开源项目：
 
 - **作者**: Dhruv Parikh
 - **邮箱**: dhruvjparikh28@gmail.com
-- **项目主页**: [GitHub Repository](https://github.com/yourusername/clipmark-extension)
-- **问题反馈**: [Issues](https://github.com/yourusername/clipmark-extension/issues)
+- **项目主页**: [GitHub Repository](https://github.com/tangjie502/clipmark-extension)
+- **问题反馈**: [Issues](https://github.com/tangjie502/clipmark-extension/issues)
 
 ---
 
@@ -312,8 +312,8 @@ ClipMark基于以下优秀的开源项目：
 
 **⭐ 如果这个项目对你有帮助，请给我们一个Star！⭐**
 
-[![Stars](https://img.shields.io/github/stars/yourusername/clipmark-extension?style=social)](https://github.com/yourusername/clipmark-extension/stargazers)
-[![Forks](https://img.shields.io/github/forks/yourusername/clipmark-extension?style=social)](https://github.com/yourusername/clipmark-extension/network/members)
+[![Stars](https://img.shields.io/github/stars/tangjie502/clipmark-extension?style=social)](https://github.com/tangjie502/clipmark-extension/stargazers)
+[![Forks](https://img.shields.io/github/forks/tangjie502/clipmark-extension?style=social)](https://github.com/tangjie502/clipmark-extension/network/members)
 
 **让知识收集更简单，让创作更高效！**
 
