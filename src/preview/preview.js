@@ -23,19 +23,15 @@ class MarkdownPreview {
             this.downloadMarkdown();
         });
         
-        document.getElementById('downloadTextBtn').addEventListener('click', () => {
-            this.downloadText();
+        document.getElementById('copyContentBtn')?.addEventListener('click', () => {
+            this.copyContent();
         });
         
         document.getElementById('viewSourceBtn').addEventListener('click', () => {
             this.toggleSourceView();
         });
         
-        document.getElementById('refreshBtn').addEventListener('click', () => {
-            this.refreshContent();
-        });
-        
-        document.getElementById('backToExtension').addEventListener('click', () => {
+        document.getElementById('backToExtension')?.addEventListener('click', () => {
             this.backToExtension();
         });
         
@@ -309,6 +305,33 @@ class MarkdownPreview {
         this.updateStatus('文本文件下载完成');
     }
     
+    // 复制内容到剪贴板
+    async copyContent() {
+        if (!this.markdownContent) {
+            this.updateStatus('没有可复制的内容');
+            return;
+        }
+        
+        try {
+            await navigator.clipboard.writeText(this.markdownContent);
+            this.updateStatus('内容已复制到剪贴板');
+        } catch (error) {
+            // 降级到传统方法
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = this.markdownContent;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                this.updateStatus('内容已复制到剪贴板');
+            } catch (fallbackError) {
+                console.error('Failed to copy to clipboard:', fallbackError);
+                this.updateStatus('复制失败');
+            }
+        }
+    }
+    
     // 刷新内容
     async refreshContent() {
         this.updateStatus('正在刷新内容...');
@@ -380,9 +403,14 @@ class MarkdownPreview {
         const wordCount = this.markdownContent.length;
         const lineCount = this.markdownContent.split('\n').length;
         
-        document.getElementById('documentSize').textContent = `${wordCount} 字符`;
-        document.getElementById('wordCount').textContent = `字数: ${wordCount}`;
-        document.getElementById('lineCount').textContent = `行数: ${lineCount}`;
+        // 可选更新元素（如果存在的话）
+        const documentSizeEl = document.getElementById('documentSize');
+        const wordCountEl = document.getElementById('wordCount');
+        const lineCountEl = document.getElementById('lineCount');
+        
+        if (documentSizeEl) documentSizeEl.textContent = `${wordCount} 字符`;
+        if (wordCountEl) wordCountEl.textContent = `字数: ${wordCount}`;
+        if (lineCountEl) lineCountEl.textContent = `行数: ${lineCount}`;
     }
     
     // 显示加载状态
@@ -406,12 +434,21 @@ class MarkdownPreview {
     
     // 更新状态栏
     updateStatus(message) {
-        document.getElementById('processingStatus').textContent = message;
-        
-        // 3秒后恢复默认状态
-        setTimeout(() => {
-            document.getElementById('processingStatus').textContent = '就绪';
-        }, 3000);
+        const statusEl = document.getElementById('processingStatus');
+        if (statusEl) {
+            statusEl.textContent = message;
+            
+            // 3秒后恢复默认状态
+            setTimeout(() => {
+                const currentStatusEl = document.getElementById('processingStatus');
+                if (currentStatusEl) {
+                    currentStatusEl.textContent = '就绪';
+                }
+            }, 3000);
+        } else {
+            // 如果没有状态栏，在控制台显示消息
+            console.log('Preview Status:', message);
+        }
     }
 }
 

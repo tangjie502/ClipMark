@@ -9,76 +9,52 @@
 </head>
 <body>
     <div class="preview-container">
-        <!-- 标题栏 -->
-        <div class="header">
-            <div class="header-content">
-                <div class="header-left">
-                    <span class="header-icon">📄</span>
-                    <h1 class="header-title">文档预览</h1>
+        <!-- 主卡片容器 -->
+        <div class="preview-card">
+            <!-- 标题栏 -->
+            <div class="header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <span class="header-icon">📄</span>
+                        <h1 class="header-title">文档预览</h1>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="copyContentBtn">📋 复制内容</button>
+                        <button class="btn btn-secondary" id="viewSourceBtn">👁️ 查看原文</button>
+                    </div>
                 </div>
-                <div class="header-actions">
-                    <button class="btn btn-secondary" id="refreshBtn">🔄 刷新内容</button>
-                    <button class="btn btn-secondary" id="viewSourceBtn">👁️ 查看源码</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 说明栏 -->
-        <div class="info-bar">
-            <p>转换结果来自当前插件，您可以预览或下载文件</p>
-        </div>
-
-        <!-- 工具栏 -->
-        <div class="toolbar">
-            <div class="toolbar-left">
-                <button class="btn btn-primary" id="downloadMarkdownBtn">⬇️ 下载 Markdown</button>
-                <button class="btn btn-success" id="downloadTextBtn">⬇️ 下载文本</button>
-            </div>
-            <div class="toolbar-right">
-                <div class="document-info">
-                    <span id="documentTitle">未命名文档</span>
-                    <span class="separator">|</span>
-                    <span id="documentSize">0 字符</span>
-                    <span class="separator">|</span>
-                    <span id="lastUpdated">刚刚更新</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- 预览内容区域 -->
-        <div class="content-area">
-            <!-- Markdown 预览 -->
-            <div class="preview-content" id="markdownPreview">
-                <div class="loading-state" id="loadingState">
-                    <div class="spinner"></div>
-                    <p>正在加载文档内容...</p>
-                </div>
-                <div class="empty-state" id="emptyState" style="display: none;">
-                    <div class="empty-icon">📄</div>
-                    <h3>暂无内容</h3>
-                    <p>请先在网页上提取内容后再查看预览</p>
-                    <button class="btn btn-primary" id="backToExtension">返回扩展</button>
-                </div>
-                <div class="markdown-content" id="markdownContent" style="display: none;">
-                    <!-- 渲染后的 markdown 内容将显示在这里 -->
-                </div>
+                <!-- 下载按钮 -->
+                <button class="download-btn" id="downloadMarkdownBtn">⬇️ 下载文档</button>
             </div>
 
-            <!-- 源码视图（隐藏） -->
-            <div class="source-view" id="sourceView" style="display: none;">
-                <pre><code id="sourceContent"></code></pre>
+            <!-- 说明栏 -->
+            <div class="info-bar">
+                <p>此文档基于 Markdown 生成，可下载离线查看</p>
             </div>
-        </div>
 
-        <!-- 底部状态栏 -->
-        <div class="status-bar">
-            <div class="status-left">
-                <span id="processingStatus">就绪</span>
-            </div>
-            <div class="status-right">
-                <span id="wordCount">字数: 0</span>
-                <span class="separator">|</span>
-                <span id="lineCount">行数: 0</span>
+            <!-- 预览内容区域 -->
+            <div class="content-area">
+                <!-- Markdown 预览 -->
+                <div class="preview-content" id="markdownPreview">
+                    <div class="loading-state" id="loadingState">
+                        <div class="spinner"></div>
+                        <p>正在加载文档内容...</p>
+                    </div>
+                    <div class="empty-state" id="emptyState" style="display: none;">
+                        <div class="empty-icon">📄</div>
+                        <h3>暂无内容</h3>
+                        <p>请先在网页上提取内容后再查看预览</p>
+                        <button class="btn btn-primary" id="backToExtension">返回扩展</button>
+                    </div>
+                    <div class="markdown-content" id="markdownContent" style="display: none;">
+                        <!-- 渲染后的 markdown 内容将显示在这里 -->
+                    </div>
+                </div>
+
+                <!-- 源码视图（隐藏） -->
+                <div class="source-view" id="sourceView" style="display: none;">
+                    <pre><code id="sourceContent"></code></pre>
+                </div>
             </div>
         </div>
     </div>

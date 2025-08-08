@@ -1,17 +1,19 @@
 :root {
-    --primary-color: #4A90E2;
-    --success-color: #28a745;
-    --secondary-color: #6c757d;
-    --danger-color: #dc3545;
-    --background-color: #f8f9fa;
-    --white: #ffffff;
-    --text-color: #333333;
+    --primary-color: #5865F2;
+    --success-color: #57F287;
+    --secondary-color: rgba(255, 255, 255, 0.8);
+    --danger-color: #ED4245;
+    --background-color: #f5f5f5;
+    --card-background: #ffffff;
+    --text-color: #2c3e50;
     --text-muted: #6c757d;
-    --border-color: #e0e0e0;
-    --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.15);
-    --border-radius: 8px;
+    --text-white: #ffffff;
+    --border-color: #e1e8ed;
+    --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --border-radius: 16px;
     --header-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --download-btn-color: #00C851;
 }
 
 * {
@@ -25,66 +27,107 @@ body {
     background-color: var(--background-color);
     color: var(--text-color);
     line-height: 1.6;
+    margin: 0;
+    padding: 20px;
 }
 
 .preview-container {
     min-height: 100vh;
     display: flex;
-    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 0;
+}
+
+/* 主卡片容器 */
+.preview-card {
+    width: 100%;
+    max-width: 1000px;
+    background: var(--card-background);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    position: relative;
 }
 
 /* 标题栏样式 */
 .header {
     background: var(--header-gradient);
-    color: white;
-    padding: 20px 0;
-    box-shadow: var(--shadow);
+    color: var(--text-white);
+    padding: 24px 32px;
+    position: relative;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
 
 .header-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 0;
 }
 
 .header-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
 }
 
 .header-icon {
-    font-size: 24px;
+    font-size: 28px;
+    filter: brightness(1.2);
 }
 
 .header-title {
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 28px;
+    font-weight: 700;
     margin: 0;
+    letter-spacing: -0.5px;
 }
 
 .header-actions {
     display: flex;
-    gap: 10px;
+    gap: 12px;
+}
+
+/* 下载按钮样式 */
+.download-btn {
+    position: absolute;
+    top: 24px;
+    right: 32px;
+    background: var(--download-btn-color);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 200, 81, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.download-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 200, 81, 0.4);
+    background: #00B848;
 }
 
 /* 说明栏样式 */
 .info-bar {
-    background: var(--white);
-    padding: 16px 0;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 20px 32px;
     border-bottom: 1px solid var(--border-color);
     text-align: center;
 }
 
 .info-bar p {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 20px;
+    margin: 0;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 500;
 }
 
 /* 工具栏样式 */
@@ -124,23 +167,24 @@ body {
 
 /* 按钮样式 */
 .btn {
-    padding: 10px 20px;
+    padding: 10px 18px;
     border: none;
-    border-radius: var(--border-radius);
+    border-radius: 10px;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
     gap: 8px;
     white-space: nowrap;
+    backdrop-filter: blur(10px);
 }
 
 .btn:hover {
     transform: translateY(-1px);
-    box-shadow: var(--shadow);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn:active {
@@ -153,7 +197,7 @@ body {
 }
 
 .btn-primary:hover {
-    background-color: #357ABD;
+    background-color: #4752C4;
 }
 
 .btn-success {
@@ -162,31 +206,30 @@ body {
 }
 
 .btn-success:hover {
-    background-color: #218838;
+    background-color: #4AE374;
 }
 
 .btn-secondary {
-    background-color: var(--secondary-color);
-    color: white;
+    background: var(--secondary-color);
+    color: var(--text-white);
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .btn-secondary:hover {
-    background-color: #545b62;
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-1px);
 }
 
 /* 内容区域样式 */
 .content-area {
-    flex: 1;
-    background: var(--white);
-    margin: 20px;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
+    background: var(--card-background);
+    min-height: 600px;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
 }
 
 .preview-content,
 .source-view {
-    padding: 40px;
+    padding: 32px;
     min-height: 500px;
 }
 
@@ -471,33 +514,54 @@ body {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-    .header-content,
-    .toolbar-left,
-    .toolbar-right,
-    .status-left,
-    .status-right {
+    body {
+        padding: 10px;
+    }
+    
+    .preview-card {
+        margin: 0;
+        border-radius: 12px;
+    }
+    
+    .header {
+        padding: 20px 24px;
+        border-radius: 12px 12px 0 0;
+    }
+    
+    .header-content {
         flex-direction: column;
-        gap: 12px;
+        gap: 16px;
         text-align: center;
     }
     
-    .content-area {
-        margin: 10px;
+    .header-actions {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .download-btn {
+        position: static;
+        margin-top: 16px;
+        align-self: center;
+    }
+    
+    .header-title {
+        font-size: 24px;
+    }
+    
+    .info-bar {
+        padding: 16px 24px;
     }
     
     .preview-content,
     .source-view {
-        padding: 20px;
+        padding: 24px;
     }
     
     .modal-content {
         margin: 20px;
         width: calc(100% - 40px);
-    }
-    
-    .document-info {
-        flex-wrap: wrap;
-        justify-content: center;
+        border-radius: 12px;
     }
 }
 
