@@ -217,12 +217,16 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
     
     // 根据配置选择集成方式
-    if (options.obsidianApiEnabled && options.obsidianApiKey) {
+    if (options.obsidianApiKey) {
       // 使用 Obsidian Local REST API
       await handleObsidianApiIntegration(article, title, markdown, options);
     } else {
-      // 使用传统的 Advanced Obsidian URI 方式
-      await handleObsidianUriIntegration(article, title, markdown, options, tabId);
+      // 如果没有配置API密钥，发送错误消息给 service worker
+      await browser.runtime.sendMessage({
+        type: 'obsidian-error',
+        error: '请先配置 Obsidian API 密钥',
+        fallback: false
+      });
     }
   }
   else if (info.menuItemId === "copy-markdown-obsall") {
@@ -236,12 +240,16 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
     
     // 根据配置选择集成方式
-    if (options.obsidianApiEnabled && options.obsidianApiKey) {
+    if (options.obsidianApiKey) {
       // 使用 Obsidian Local REST API
       await handleObsidianApiIntegration(article, title, markdown, options);
     } else {
-      // 使用传统的 Advanced Obsidian URI 方式
-      await handleObsidianUriIntegration(article, title, markdown, options, tabId);
+      // 如果没有配置API密钥，发送错误消息给 service worker
+      await browser.runtime.sendMessage({
+        type: 'obsidian-error',
+        error: '请先配置 Obsidian API 密钥',
+        fallback: false
+      });
     }
   }
   else {
@@ -1473,36 +1481,6 @@ async function handleObsidianApiIntegration(article, title, markdown, options) {
     
   } catch (error) {
     console.error('Failed to send to Obsidian via REST API:', error);
-    
-    // 发送错误消息给 service worker 来处理
-    await browser.runtime.sendMessage({
-      type: 'obsidian-error',
-      error: error.message,
-      fallback: true
-    });
-  }
-}
-
-/**
- * 处理传统的 Advanced Obsidian URI 集成
- */
-async function handleObsidianUriIntegration(article, title, markdown, options, tabId) {
-  try {
-    // 构建 Obsidian URI
-    const obsidianVault = options.obsidianVaultUri || options.obsidianVault;
-    const obsidianFolder = await formatObsidianFolder(article, options);
-    const filePath = obsidianFolder + generateValidFileName(title, options.disallowedChars);
-    
-    // 发送消息给 service worker 来处理 Obsidian URI 打开
-    await browser.runtime.sendMessage({
-      type: 'open-obsidian-uri',
-      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${encodeURIComponent(filePath)}`
-    });
-    
-    console.log('Successfully sent to Obsidian via Advanced URI');
-    
-  } catch (error) {
-    console.error('Failed to send to Obsidian via Advanced URI:', error);
     
     // 发送错误消息给 service worker 来处理
     await browser.runtime.sendMessage({

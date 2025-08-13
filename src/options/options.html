@@ -127,95 +127,64 @@
         <div class="checkbox-container" id="obsidian-container">
             <h3>Obsidian 集成</h3>
             <p>
-                要与 Obsidian 集成，您可以选择以下两种方式之一：
+                使用 Obsidian Local REST API 进行集成，无需额外插件，功能更强大。
             </p>
-            
-            <!-- Obsidian Local REST API 选项 -->
-            <div class="radio-container" id="obsidianApiType">
-                <input type="radio" name="obsidianApiType" id="obsidianApiTypeRest" value="rest" />
-                <label for="obsidianApiTypeRest">
-                    <strong>Obsidian Local REST API（推荐）</strong>
-                    <br/>
-                    <small>使用Obsidian内置的REST API，无需额外插件，功能更强大</small>
-                </label>
-                <br/>
-                <input type="radio" name="obsidianApiType" id="obsidianApiTypeUri" value="uri" />
-                <label for="obsidianApiTypeUri">
-                    <strong>Advanced Obsidian URI（传统方式）</strong>
-                    <br/>
-                    <small>需要安装 <a href="https://vinzent03.github.io/obsidian-advanced-uri/" target="_blank">Advanced Obsidian URI</a> 插件</small>
-                </label>
-            </div>
             
             <input name="obsidianIntegration" id="obsidianIntegration" type="checkbox" />
             <label for="obsidianIntegration">启用 Obsidian 集成</label>
-        </div>
-
-        <br />
-
-        <!-- Obsidian Local REST API 配置 -->
-        <div class="textbox-container" id="obsidianApiConfig" style="display: none;">
-            <h4>REST API 配置</h4>
             
-            <div class="form-group">
-                <label for="obsidianApiUrl">API 服务器地址：</label>
-                <input type="text" name="obsidianApiUrl" role="textbox" placeholder="http://127.0.0.1:27123" />
-                <small>默认端口：27123 (HTTP) 或 27124 (HTTPS)</small>
-            </div>
-            
-            <div class="form-group">
-                <label for="obsidianApiPort">端口号：</label>
-                <input type="text" name="obsidianApiPort" role="textbox" placeholder="27123" />
-            </div>
-            
-            <div class="checkbox-container">
-                <input name="obsidianApiSecure" id="obsidianApiSecure" type="checkbox" />
-                <label for="obsidianApiSecure">使用 HTTPS（安全模式）</label>
-            </div>
-            
-            <div class="form-group">
-                <label for="obsidianApiKey">API 密钥：</label>
-                <input type="password" name="obsidianApiKey" role="textbox" placeholder="在Obsidian设置中获取API密钥" />
-                <small>在 Obsidian 设置 → 插件 → Local REST API 中获取</small>
-            </div>
-            
-            <div class="form-group">
-                <label for="obsidianVault">Obsidian 仓库名称：</label>
-                <input type="text" name="obsidianVault" role="textbox" placeholder="如果为空，将使用主仓库" />
-            </div>
-            
-            <div class="form-group">
-                <label for="obsidianFolder">Obsidian 文件夹名称：</label>
-                <input type="text" name="obsidianFolder" role="textbox" placeholder="例如：Clippers" />
-            </div>
-            
-            <div class="info-box">
-                <strong>设置说明：</strong>
-                <ol>
-                    <li>在 Obsidian 中安装并启用 "Local REST API" 插件</li>
-                    <li>在插件设置中获取 API 密钥</li>
-                    <li>确保 Obsidian 正在运行</li>
-                    <li>测试连接以确保配置正确</li>
-                </ol>
-            </div>
-        </div>
-
-        <!-- 传统 Advanced Obsidian URI 配置 -->
-        <div class="textbox-container" id="obsidianUriConfig" style="display: none;">
-            <h4>Advanced Obsidian URI 配置</h4>
-            <p>
-                要与 Obsidian 集成，您需要安装并启用名为 <code>Advanced Obsidian URI</code> 的社区插件。该插件帮助我们绕过 URL 中的字符限制。因为它使用剪贴板作为创建新文件的源。
-                更多信息：  <a href="https://vinzent03.github.io/obsidian-advanced-uri/">Obsidian Advanced URI</a>
-            </p>
-            
-            <div class="form-group">
-                <label for="obsidianVaultUri">Obsidian 仓库名称：</label>
-                <input type="text" name="obsidianVaultUri" role="textbox" placeholder="如果为空，将使用主仓库。请指定它。" />
-            </div>
-            
-            <div class="form-group">
-                <label for="obsidianFolderUri">Obsidian 文件夹名称：</label>
-                <input type="text" name="obsidianFolderUri" role="textbox" placeholder="输入文件夹名称，例如：Clippers"/>
+            <!-- Obsidian Local REST API 配置 -->
+            <div class="textbox-container" id="obsidianApiConfig" style="display: none;">
+                <h4>REST API 配置</h4>
+                
+                <div class="form-group">
+                    <label for="obsidianApiUrl">API 服务器地址：</label>
+                    <input type="text" name="obsidianApiUrl" role="textbox" placeholder="http://127.0.0.1:27123" />
+                    <small>默认端口：27123 (HTTP) 或 27124 (HTTPS)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="obsidianApiPort">端口号：</label>
+                    <input type="text" name="obsidianApiPort" role="textbox" placeholder="27123" />
+                </div>
+                
+                <div class="checkbox-container">
+                    <input name="obsidianApiSecure" id="obsidianApiSecure" type="checkbox" />
+                    <label for="obsidianApiSecure">使用 HTTPS（安全模式）</label>
+                </div>
+                
+                <div class="form-group">
+                    <label for="obsidianApiKey">API 密钥：</label>
+                    <input type="password" name="obsidianApiKey" role="textbox" placeholder="在Obsidian设置中获取API密钥" />
+                    <small>在 Obsidian 设置 → 插件 → Local REST API 中获取</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="obsidianVault">Obsidian 仓库名称：</label>
+                    <input type="text" name="obsidianVault" role="textbox" placeholder="如果为空，将使用主仓库" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="obsidianFolder">Obsidian 文件夹名称：</label>
+                    <input type="text" name="obsidianFolder" role="textbox" placeholder="例如：Clippers" />
+                </div>
+                
+                <div class="info-box">
+                    <strong>设置说明：</strong>
+                    <ol>
+                        <li>在 Obsidian 中安装并启用 "Local REST API" 插件</li>
+                        <li>在插件设置中获取 API 密钥</li>
+                        <li>确保 Obsidian 正在运行</li>
+                        <li>测试连接以确保配置正确</li>
+                    </ol>
+                </div>
+                
+                <div class="form-group" style="margin-top: 16px;">
+                    <button type="button" id="testObsidianConnection" class="btn btn-primary">
+                        🔗 测试 Obsidian 连接
+                    </button>
+                    <div id="connectionTestResult" style="margin-top: 8px; display: none;"></div>
+                </div>
             </div>
         </div>
 

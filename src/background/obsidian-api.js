@@ -24,6 +24,12 @@ class ObsidianApiService {
      */
     async testConnection() {
         try {
+            console.log('测试 Obsidian API 连接:', {
+                baseUrl: this.baseUrl,
+                hasApiKey: !!this.config.obsidianApiKey,
+                apiKeyLength: this.config.obsidianApiKey ? this.config.obsidianApiKey.length : 0
+            });
+
             const response = await fetch(`${this.baseUrl}/`, {
                 method: 'GET',
                 headers: {
@@ -34,21 +40,35 @@ class ObsidianApiService {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('Obsidian API 连接成功:', data);
                 return {
                     success: true,
                     data: data,
                     message: '连接成功'
                 };
             } else {
+                console.error('Obsidian API 连接失败:', {
+                    status: response.status,
+                    statusText: response.statusText
+                });
                 return {
                     success: false,
                     message: `连接失败: ${response.status} ${response.statusText}`
                 };
             }
         } catch (error) {
+            console.error('Obsidian API 连接异常:', {
+                error: error.message,
+                type: error.name,
+                baseUrl: this.baseUrl
+            });
             return {
                 success: false,
-                message: `连接错误: ${error.message}`
+                message: `连接错误: ${error.message}`,
+                details: {
+                    type: error.name,
+                    baseUrl: this.baseUrl
+                }
             };
         }
     }
@@ -68,7 +88,16 @@ class ObsidianApiService {
                 fullContent = frontmatterText + '\n\n' + content;
             }
 
-            const response = await fetch(`${this.baseUrl}/vault/${encodeURIComponent(fullPath)}`, {
+            const apiUrl = `${this.baseUrl}/vault/${encodeURIComponent(fullPath)}`;
+            console.log('尝试调用 Obsidian API:', {
+                url: apiUrl,
+                method: 'PUT',
+                hasContent: !!fullContent,
+                contentLength: fullContent.length,
+                config: this.config
+            });
+
+            const response = await fetch(apiUrl, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${this.config.obsidianApiKey}`,
@@ -85,6 +114,11 @@ class ObsidianApiService {
                 };
             } else {
                 const errorData = await response.json().catch(() => ({}));
+                console.error('Obsidian API 响应错误:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    errorData: errorData
+                });
                 return {
                     success: false,
                     message: `创建文件失败: ${response.status} ${response.statusText}`,
@@ -92,9 +126,20 @@ class ObsidianApiService {
                 };
             }
         } catch (error) {
+            console.error('Obsidian API 调用异常:', {
+                error: error.message,
+                stack: error.stack,
+                config: this.config,
+                baseUrl: this.baseUrl
+            });
             return {
                 success: false,
-                message: `创建文件错误: ${error.message}`
+                message: `创建文件错误: ${error.message}`,
+                details: {
+                    type: error.name,
+                    config: this.config,
+                    baseUrl: this.baseUrl
+                }
             };
         }
     }
@@ -256,30 +301,18 @@ class ObsidianApiService {
     /**
      * 搜索文件
      */
-    async searchFiles(query, queryType = 'simple') {
+    async searchFiles(query, queryType = 'filename') {
         try {
-            let url = `${this.baseUrl}/search/`;
-            let headers = {
-                'Authorization': `Bearer ${this.config.obsidianApiKey}`
-            };
-            let body = null;
-
-            if (queryType === 'simple') {
-                url += 'simple/';
-                const params = new URLSearchParams({ query });
-                url += '?' + params.toString();
-            } else if (queryType === 'dataview') {
-                headers['Content-Type'] = 'application/vnd.olrapi.dataview.dql+txt';
-                body = query;
-            } else if (queryType === 'jsonlogic') {
-                headers['Content-Type'] = 'application/vnd.olrapi.jsonlogic+json';
-                body = JSON.stringify(query);
-            }
-
-            const response = await fetch(url, {
+            const response = await fetch(`${this.baseUrl}/search/`, {
                 method: 'POST',
-                headers: headers,
-                body: body
+                headers: {
+                    'Authorization': `Bearer ${this.config.obsidianApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    query: query,
+                    query_type: queryType
+                })
             });
 
             if (response.ok) {
@@ -290,9 +323,11 @@ class ObsidianApiService {
                     message: '搜索成功'
                 };
             } else {
+                const errorData = await response.json().catch(() => ({}));
                 return {
                     success: false,
-                    message: `搜索失败: ${response.status} ${response.statusText}`
+                    message: `搜索失败: ${response.status} ${response.statusText}`,
+                    error: errorData
                 };
             }
         } catch (error) {
@@ -304,9 +339,5 @@ class ObsidianApiService {
     }
 }
 
-// 导出服务类
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = ObsidianApiService;
-} else if (typeof window !== 'undefined') {
-    window.ObsidianApiService = ObsidianApiService;
-}
+// 在Service Worker环境中，类会自动在全局作用域中可用
+// 不需要额外的导出语句

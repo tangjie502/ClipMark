@@ -1,11 +1,20 @@
 importScripts(
   'browser-polyfill.min.js',
+  'background/obsidian-api.js',
   'background/moment.min.js',
   'background/apache-mime-types.js',
-  'background/obsidian-api.js',
   'shared/default-options.js',
   'shared/context-menus.js'
 );
+
+// 检查 ObsidianApiService 是否正确加载
+console.log('Service Worker 初始化...');
+console.log('ObsidianApiService 可用性:', typeof ObsidianApiService);
+if (typeof ObsidianApiService === 'undefined') {
+  console.error('❌ ObsidianApiService 未定义！请检查 obsidian-api.js 是否正确导入');
+} else {
+  console.log('✅ ObsidianApiService 已正确加载');
+}
 
 // Log platform info
 browser.runtime.getPlatformInfo().then(async platformInfo => {
@@ -106,6 +115,9 @@ async function handleMessages(message, sender, sendResponse) {
       
     case "open-obsidian-uri":
       await handleOpenObsidianUri(message.url);
+      break;
+    case "test-obsidian-connection":
+      await handleTestObsidianConnection(message.options, sendResponse);
       break;
   }
   
@@ -884,12 +896,21 @@ async function copyMarkdownFromContext(info, tab) {
         const { markdown } = await convertArticleToMarkdown(article, false);
         
         // 根据配置选择集成方式
-        if (options.obsidianApiEnabled && options.obsidianApiKey) {
+        if (options.obsidianApiKey) {
           // 使用 Obsidian Local REST API
           await handleObsidianApiIntegration(article, title, markdown, options);
         } else {
-          // 使用传统的 Advanced Obsidian URI 方式
-          await handleObsidianUriIntegration(article, title, markdown, options, tab.id);
+          // 如果没有配置API密钥，显示错误提示
+          console.error('Obsidian API key not configured');
+          await browser.action.setBadgeText({ text: '✗' });
+          await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
+          await browser.action.setTitle({ title: 'ClipMark - 请先配置 Obsidian API 密钥' });
+          
+          // 5秒后清除徽章
+          setTimeout(async () => {
+            await browser.action.setBadgeText({ text: '' });
+            await browser.action.setTitle({ title: 'ClipMark' });
+          }, 5000);
         }
       }
       else if(info.menuItemId == "copy-markdown-obsall") {
@@ -899,12 +920,21 @@ async function copyMarkdownFromContext(info, tab) {
         const { markdown } = await convertArticleToMarkdown(article, false);
         
         // 根据配置选择集成方式
-        if (options.obsidianApiEnabled && options.obsidianApiKey) {
+        if (options.obsidianApiKey) {
           // 使用 Obsidian Local REST API
           await handleObsidianApiIntegration(article, title, markdown, options);
         } else {
-          // 使用传统的 Advanced Obsidian URI 方式
-          await handleObsidianUriIntegration(article, title, markdown, options, tab.id);
+          // 如果没有配置API密钥，显示错误提示
+          console.error('Obsidian API key not configured');
+          await browser.action.setBadgeText({ text: '✗' });
+          await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
+          await browser.action.setTitle({ title: 'ClipMark - 请先配置 Obsidian API 密钥' });
+          
+          // 5秒后清除徽章
+          setTimeout(async () => {
+            await browser.action.setBadgeText({ text: '' });
+            await browser.action.setTitle({ title: 'ClipMark' });
+          }, 5000);
         }
       }
       else {
@@ -2188,4 +2218,45 @@ async function formatObsidianFolder(article, options = null) {
   }
   
   return obsidianFolder;
+}
+
+/**
+ * 处理 Obsidian 连接测试
+ */
+async function handleTestObsidianConnection(options, sendResponse) {
+  try {
+    console.log('开始测试 Obsidian API 连接...');
+    
+    // 创建 Obsidian API 服务实例
+    const obsidianApi = new ObsidianApiService(options);
+    
+    // 测试连接
+    const result = await obsidianApi.testConnection();
+    
+    console.log('连接测试结果:', result);
+    
+    // 发送结果回调用方
+    if (sendResponse) {
+      sendResponse(result);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('连接测试失败:', error);
+    
+    const errorResult = {
+      success: false,
+      message: `连接测试失败: ${error.message}`,
+      details: {
+        type: error.name,
+        stack: error.stack
+      }
+    };
+    
+    if (sendResponse) {
+      sendResponse(errorResult);
+    }
+    
+    return errorResult;
+  }
 }
