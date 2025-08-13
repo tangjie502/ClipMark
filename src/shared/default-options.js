@@ -36,8 +36,7 @@ const defaultOptions = {
   // Obsidian Local REST API 配置
   obsidianApiUrl: "http://127.0.0.1:27123",
   obsidianApiKey: "",
-  obsidianApiSecure: false,
-  obsidianApiPort: "27123"
+  obsidianApiSecure: false
 }
 
 // function to get the options from storage and substitute default options if it fails

@@ -137,20 +137,15 @@
             <div class="textbox-container" id="obsidianApiConfig" style="display: none;">
                 <h4>REST API 配置</h4>
                 
+                <div class="checkbox-container">
+                    <input name="obsidianApiSecure" id="obsidianApiSecure" type="checkbox" />
+                    <label for="obsidianApiSecure">使用 HTTPS（安全模式）</label>
+                </div>
+                
                 <div class="form-group">
                     <label for="obsidianApiUrl">API 服务器地址：</label>
                     <input type="text" name="obsidianApiUrl" role="textbox" placeholder="http://127.0.0.1:27123" />
                     <small>默认端口：27123 (HTTP) 或 27124 (HTTPS)</small>
-                </div>
-                
-                <div class="form-group">
-                    <label for="obsidianApiPort">端口号：</label>
-                    <input type="text" name="obsidianApiPort" role="textbox" placeholder="27123" />
-                </div>
-                
-                <div class="checkbox-container">
-                    <input name="obsidianApiSecure" id="obsidianApiSecure" type="checkbox" />
-                    <label for="obsidianApiSecure">使用 HTTPS（安全模式）</label>
                 </div>
                 
                 <div class="form-group">

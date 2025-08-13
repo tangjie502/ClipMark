@@ -117,8 +117,27 @@ async function handleMessages(message, sender, sendResponse) {
       await handleOpenObsidianUri(message.url);
       break;
     case "test-obsidian-connection":
-      await handleTestObsidianConnection(message.options, sendResponse);
-      break;
+      console.log('收到测试连接消息:', message);
+      console.log('sendResponse 类型:', typeof sendResponse);
+      console.log('sendResponse 是否函数:', typeof sendResponse === 'function');
+      
+      // 直接处理异步操作，不使用包装函数
+      handleTestObsidianConnection(message.options, sender, sendResponse)
+        .then(testResult => {
+          console.log('测试连接处理完成，结果:', testResult);
+        })
+        .catch(error => {
+          console.error('测试连接处理异常:', error);
+          if (sendResponse && typeof sendResponse === 'function') {
+            sendResponse({
+              success: false,
+              message: `处理异常: ${error.message}`
+            });
+          }
+        });
+      
+      // 立即返回 true 保持消息通道开放
+      return true;
   }
   
   // 对于需要异步处理响应的消息类型，使用Promise
@@ -2223,7 +2242,7 @@ async function formatObsidianFolder(article, options = null) {
 /**
  * 处理 Obsidian 连接测试
  */
-async function handleTestObsidianConnection(options, sendResponse) {
+async function handleTestObsidianConnection(options, sender, sendResponse) {
   try {
     console.log('开始测试 Obsidian API 连接...');
     
@@ -2235,9 +2254,12 @@ async function handleTestObsidianConnection(options, sendResponse) {
     
     console.log('连接测试结果:', result);
     
-    // 发送结果回调用方
-    if (sendResponse) {
+    // 确保立即调用 sendResponse
+    if (sendResponse && typeof sendResponse === 'function') {
+      console.log('调用 sendResponse 返回结果:', result);
       sendResponse(result);
+    } else {
+      console.error('sendResponse 不可用！');
     }
     
     return result;
@@ -2253,8 +2275,12 @@ async function handleTestObsidianConnection(options, sendResponse) {
       }
     };
     
-    if (sendResponse) {
+    // 确保立即调用 sendResponse
+    if (sendResponse && typeof sendResponse === 'function') {
+      console.log('调用 sendResponse 返回错误结果:', errorResult);
       sendResponse(errorResult);
+    } else {
+      console.error('sendResponse 不可用！');
     }
     
     return errorResult;

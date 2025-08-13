@@ -24,7 +24,6 @@ const saveOptions = e => {
         obsidianApiUrl: document.querySelector("[name='obsidianApiUrl']")?.value || "http://127.0.0.1:27123",
         obsidianApiKey: document.querySelector("[name='obsidianApiKey']")?.value || "",
         obsidianApiSecure: document.querySelector("[name='obsidianApiSecure']")?.checked || false,
-        obsidianApiPort: document.querySelector("[name='obsidianApiPort']")?.value || "27123",
 
         preserveCodeFormatting: document.querySelector("[name='preserveCodeFormatting']").checked,
 
@@ -154,7 +153,6 @@ const setCurrentChoice = result => {
     document.querySelector("[name='obsidianApiUrl']").value = options.obsidianApiUrl;
     document.querySelector("[name='obsidianApiKey']").value = options.obsidianApiKey;
     document.querySelector("[name='obsidianApiSecure']").checked = options.obsidianApiSecure;
-    document.querySelector("[name='obsidianApiPort']").value = options.obsidianApiPort;
 
     // Set preserveCodeFormatting checkbox
     document.querySelector("[name='preserveCodeFormatting']").checked = options.preserveCodeFormatting;
@@ -189,7 +187,6 @@ const restoreOptions = async () => {
         // 初始化：如果是首次使用，设置默认的Obsidian配置
         if (!result.hasOwnProperty('obsidianApiUrl')) {
             result.obsidianApiUrl = "http://127.0.0.1:27123";
-            result.obsidianApiPort = "27123";
             result.obsidianApiSecure = false;
             result.obsidianApiKey = "";
             result.obsidianVault = "";
@@ -442,8 +439,7 @@ function getCurrentFormData() {
         downloadMode: getCheckedValue(document.querySelectorAll("input[name='downloadMode']")),
         obsidianApiUrl: document.querySelector("[name='obsidianApiUrl']")?.value || "http://127.0.0.1:27123",
         obsidianApiKey: document.querySelector("[name='obsidianApiKey']")?.value || "",
-        obsidianApiSecure: document.querySelector("[name='obsidianApiSecure']")?.checked || false,
-        obsidianApiPort: document.querySelector("[name='obsidianApiPort']")?.value || "27123"
+        obsidianApiSecure: document.querySelector("[name='obsidianApiSecure']")?.checked || false
     };
 }
 
@@ -593,6 +589,24 @@ window.save = function() {
 };
 
 /**
+ * 绑定测试按钮事件
+ */
+function bindTestButtonEvent() {
+    const testConnectionBtn = document.getElementById('testObsidianConnection');
+    if (testConnectionBtn) {
+        console.log('找到测试按钮，绑定事件');
+        testConnectionBtn.addEventListener('click', async () => {
+            console.log('测试按钮被点击');
+            await testObsidianConnection();
+        });
+    } else {
+        console.warn('测试按钮未找到，将在下次刷新时重试');
+        // 如果按钮还没创建，稍后重试
+        setTimeout(bindTestButtonEvent, 1000);
+    }
+}
+
+/**
  * 测试 Obsidian API 连接
  */
 async function testObsidianConnection() {
@@ -615,18 +629,39 @@ async function testObsidianConnection() {
         
         console.log('开始测试连接，配置:', {
             apiUrl: options.obsidianApiUrl,
-            apiPort: options.obsidianApiPort,
             apiSecure: options.obsidianApiSecure,
             hasApiKey: !!options.obsidianApiKey
         });
         
-        // 发送测试消息给 service worker
-        const result = await browser.runtime.sendMessage({
-            type: 'test-obsidian-connection',
-            options: options
-        });
+        // 发送测试消息到 service worker
+        console.log('发送测试消息到 service worker...');
+        console.log('消息内容:', { type: 'test-obsidian-connection', options: options });
         
-        console.log('连接测试结果:', result);
+        console.log('准备发送消息到 service worker...');
+        
+        // 尝试最简单的方式
+        let result;
+        try {
+            console.log('发送消息...');
+            result = await browser.runtime.sendMessage({
+                type: 'test-obsidian-connection',
+                options: options
+            });
+            console.log('sendMessage 直接返回:', result);
+        } catch (error) {
+            console.error('sendMessage 出错:', error);
+            throw error;
+        }
+        
+        console.log('最终结果:', result);
+        console.log('响应类型:', typeof result);
+        console.log('响应是否为空:', result === null || result === undefined);
+        console.log('响应是否有 success 属性:', result && result.hasOwnProperty('success'));
+        
+        // 检查结果是否有效
+        if (!result) {
+            throw new Error('未收到有效的测试结果');
+        }
         
         // 显示结果
         resultDiv.style.display = 'block';
@@ -697,14 +732,6 @@ function initializeOptionsPage() {
         });
     }
     
-    // 绑定 Obsidian 连接测试按钮
-    const testConnectionBtn = document.getElementById('testObsidianConnection');
-    if (testConnectionBtn) {
-        testConnectionBtn.addEventListener('click', async () => {
-            await testObsidianConnection();
-        });
-    }
-    
     // 监听页面卸载事件，提醒用户保存未保存的更改
     window.addEventListener('beforeunload', (event) => {
         if (hasUnsavedChanges) {
@@ -713,6 +740,11 @@ function initializeOptionsPage() {
             return message;
         }
     });
+    
+    // 延迟绑定测试按钮事件，确保元素已创建
+    setTimeout(() => {
+        bindTestButtonEvent();
+    }, 500);
 }
 
 // 在DOM加载完成后初始化

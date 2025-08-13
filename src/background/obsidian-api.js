@@ -14,8 +14,28 @@ class ObsidianApiService {
      */
     buildBaseUrl() {
         const protocol = this.config.obsidianApiSecure ? 'https' : 'http';
-        const host = this.config.obsidianApiUrl.replace(/^https?:\/\//, '').split(':')[0] || '127.0.0.1';
-        const port = this.config.obsidianApiPort || (this.config.obsidianApiSecure ? '27124' : '27123');
+        
+        // 从API URL中提取主机和端口
+        let host = '127.0.0.1';
+        let port = this.config.obsidianApiSecure ? '27124' : '27123';
+        
+        if (this.config.obsidianApiUrl) {
+            try {
+                const url = new URL(this.config.obsidianApiUrl);
+                host = url.hostname;
+                port = url.port || (this.config.obsidianApiSecure ? '27124' : '27123');
+            } catch (error) {
+                console.warn('无法解析API URL，使用默认值:', error);
+                // 尝试手动解析
+                const urlMatch = this.config.obsidianApiUrl.match(/^(?:https?:\/\/)?([^:]+)(?::(\d+))?/);
+                if (urlMatch) {
+                    host = urlMatch[1];
+                    port = urlMatch[2] || (this.config.obsidianApiSecure ? '27124' : '27123');
+                }
+            }
+        }
+        
+        console.log('构建API基础URL:', { protocol, host, port, config: this.config });
         return `${protocol}://${host}:${port}`;
     }
 
