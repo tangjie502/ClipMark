@@ -1312,22 +1312,53 @@ async function startLinkSelectionMode(tab) {
 /**
  * Handle batch links selected from content script
  */
+// 大批量处理全局状态
+let largeBatchProcessing = {
+  isActive: false,
+  isPaused: false,
+  isCancelled: false,
+  totalUrls: 0,
+  completed: 0,
+  successful: 0,
+  failed: 0,
+  activeTabs: new Set(),
+  collectedMarkdown: []
+};
+
 async function handleBatchLinksSelected(message) {
   try {
     const selectedLinks = message.links;
     
     if (!selectedLinks || selectedLinks.length === 0) {
-  
       return;
     }
-    
-
     
     // 转换为URL对象格式（兼容批量转换逻辑）
     const urlObjects = selectedLinks.map(link => ({
       url: link.url,
       title: link.text && link.text.trim() ? link.text.trim() : null
     }));
+    
+    // 检查是否是大批量处理（超过20个URL）
+    const isLargeBatch = urlObjects.length > 20;
+    
+    if (isLargeBatch) {
+      // 初始化大批量处理状态
+      largeBatchProcessing = {
+        isActive: true,
+        isPaused: false,
+        isCancelled: false,
+        totalUrls: urlObjects.length,
+        completed: 0,
+        successful: 0,
+        failed: 0,
+        activeTabs: new Set(),
+        collectedMarkdown: []
+      };
+      
+      // 通知popup显示大批量处理界面
+      await notifyPopupLargeBatch(urlObjects.length);
+    }
     
     // 设置处理状态徽章
     await browser.action.setBadgeText({
@@ -1337,118 +1368,199 @@ async function handleBatchLinksSelected(message) {
       color: '#007acc'
     });
     await browser.action.setTitle({
-                  title: `ClipMark - 正在处理 ${selectedLinks.length} 个链接...`
+      title: `ClipMark - 正在处理 ${selectedLinks.length} 个链接...`
     });
     
-
-    
     try {
-      const tabs = [];
       const total = urlObjects.length;
-      let current = 0;
       const collectedMarkdown = [];
       
-      // 创建并加载所有标签页
-      for (const urlObj of urlObjects) {
-        current++;
-
-        
-      const tab = await browser.tabs.create({ 
-          url: urlObj.url, 
-        active: false 
-      });
-      
-        if (urlObj.title) {
-          tab.customTitle = urlObj.title;
-        }
-        
-        tabs.push(tab);
-        
-        // 等待标签页加载
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            reject(new Error(`Timeout loading ${urlObj.url}`));
-        }, 30000);
-        
-        function listener(tabId, info) {
-          if (tabId === tab.id && info.status === 'complete') {
-            clearTimeout(timeout);
-            browser.tabs.onUpdated.removeListener(listener);
-      
-            resolve();
-          }
-        }
-        browser.tabs.onUpdated.addListener(listener);
-      });
-
-      // 确保脚本已注入
-      await browser.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["/browser-polyfill.min.js", "/contentScript/contentScript.js"]
-      });
+      // 根据批量大小调整并发数量
+      let MAX_CONCURRENT_TABS;
+      if (total > 100) {
+        MAX_CONCURRENT_TABS = 2; // 超大批量使用更保守的并发数
+      } else if (total > 50) {
+        MAX_CONCURRENT_TABS = 3;
+      } else {
+        MAX_CONCURRENT_TABS = 4; // 中等批量可以更快处理
       }
-
-      // 重置计数器，开始转换阶段
-      current = 0;
-
       
-      // 处理每个标签页并收集markdown
-      for (const tab of tabs) {
-        try {
-          current++;
-  
-          
-          // 使用请求ID系统来跟踪特定的处理请求
-          const requestId = `batch-${Date.now()}-${tab.id}`;
-          
-          const displayMdPromise = new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-              reject(new Error('Timeout waiting for markdown generation'));
-        }, 30000);
+      // 分批处理URL
+      for (let i = 0; i < total; i += MAX_CONCURRENT_TABS) {
+        // 检查是否被取消或暂停
+        if (largeBatchProcessing.isCancelled) {
+          await notifyPopupProgress('处理已取消', i, total, '');
+          break;
+        }
         
-            // 监听 markdown-result 消息（来自 offscreen 处理）
-            function markdownResultListener(message) {
-              if (message.type === "markdown-result" && message.requestId === requestId) {
-            clearTimeout(timeout);
-                browser.runtime.onMessage.removeListener(markdownResultListener);
-      
-                
-                const title = tab.customTitle || message.result.article.title || tab.url;
-                const markdown = message.result.markdown || '';
-                
-                // 收集markdown内容
-                collectedMarkdown.push({
-                  title: title,
-                  url: tab.url,
-                  markdown: markdown
-                });
-                
+        // 等待暂停状态结束
+        while (largeBatchProcessing.isPaused && !largeBatchProcessing.isCancelled) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        if (largeBatchProcessing.isCancelled) break;
+        
+        const batch = urlObjects.slice(i, i + MAX_CONCURRENT_TABS);
+        const batchTabs = [];
+        
+        // 更新进度显示
+        await browser.action.setTitle({
+          title: `ClipMark - 处理进度 ${i + 1}-${Math.min(i + batch.length, total)}/${total}`
+        });
+        
+        // 创建当前批次的标签页
+        for (const urlObj of batch) {
+          const tab = await browser.tabs.create({ 
+            url: urlObj.url, 
+            active: false // 隐藏标签页，减少UI干扰
+          });
+          
+          if (urlObj.title) {
+            tab.customTitle = urlObj.title;
+          }
+          
+          // 记录活跃标签页ID
+          if (isLargeBatch) {
+            largeBatchProcessing.activeTabs.add(tab.id);
+          }
+          
+          batchTabs.push(tab);
+        }
+        
+        // 等待当前批次的标签页加载完成
+        await Promise.all(batchTabs.map(tab => 
+          new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error(`Timeout loading ${tab.url}`));
+            }, 30000);
+            
+            function listener(tabId, info) {
+              if (tabId === tab.id && info.status === 'complete') {
+                clearTimeout(timeout);
+                browser.tabs.onUpdated.removeListener(listener);
                 resolve();
               }
             }
+            browser.tabs.onUpdated.addListener(listener);
+          })
+        ));
+        
+        // 注入脚本到当前批次标签页
+        await Promise.all(batchTabs.map(tab => 
+          browser.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ["/browser-polyfill.min.js", "/contentScript/contentScript.js"]
+          }).catch(error => {
+            console.error(`Failed to inject scripts into tab ${tab.id}:`, error);
+          })
+        ));
+        
+        // 处理当前批次标签页并收集markdown
+        const batchPromises = batchTabs.map(async (tab) => {
+          try {
+            const requestId = `batch-${Date.now()}-${tab.id}`;
             
-            browser.runtime.onMessage.addListener(markdownResultListener);
-          });
+            const displayMdPromise = new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error('Timeout waiting for markdown generation'));
+              }, 30000);
+              
+              // 监听 markdown-result 消息（来自 offscreen 处理）
+              function markdownResultListener(message) {
+                if (message.type === "markdown-result" && message.requestId === requestId) {
+                  clearTimeout(timeout);
+                  browser.runtime.onMessage.removeListener(markdownResultListener);
+                  
+                  const title = tab.customTitle || message.result.article.title || tab.url;
+                  const markdown = message.result.markdown || '';
+                  
+                  resolve({
+                    title: title,
+                    url: tab.url,
+                    markdown: markdown
+                  });
+                }
+              }
+              
+              browser.runtime.onMessage.addListener(markdownResultListener);
+            });
 
-          // 使用直接的 offscreen 处理方式
-          await triggerContentExtractionWithRequestId(tab.id, requestId);
-          await displayMdPromise;
+            // 使用直接的 offscreen 处理方式
+            await triggerContentExtractionWithRequestId(tab.id, requestId);
+            return await displayMdPromise;
 
-        } catch (error) {
-          console.error(`Error processing tab ${tab.id}:`, error);
-          
-          // 即使出错也添加占位符，保持处理连续性
-          collectedMarkdown.push({
-            title: `Error: ${tab.url}`,
-            url: tab.url,
-            markdown: `# Error\n\n无法转换此页面: ${error.message}\n\nURL: ${tab.url}\n\n---\n\n`
-          });
+          } catch (error) {
+            console.error(`Error processing tab ${tab.id}:`, error);
+            
+            return {
+              title: `Error: ${tab.url}`,
+              url: tab.url,
+              markdown: `# Error\n\n无法转换此页面: ${error.message}\n\nURL: ${tab.url}\n\n---\n\n`
+            };
+          }
+        });
+        
+        // 等待当前批次处理完成
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // 收集结果并更新统计
+        batchResults.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            collectedMarkdown.push(result.value);
+            if (isLargeBatch) {
+              largeBatchProcessing.successful++;
+              largeBatchProcessing.collectedMarkdown.push(result.value);
+            }
+          } else {
+            console.error('Batch processing failed:', result.reason);
+            const errorResult = {
+              title: 'Processing Error',
+              url: 'unknown',
+              markdown: `# Error\n\n批次处理失败: ${result.reason}\n\n---\n\n`
+            };
+            collectedMarkdown.push(errorResult);
+            if (isLargeBatch) {
+              largeBatchProcessing.failed++;
+              largeBatchProcessing.collectedMarkdown.push(errorResult);
+            }
+          }
+        });
+        
+        // 更新大批量处理进度
+        if (isLargeBatch) {
+          largeBatchProcessing.completed = i + batch.length;
+          await notifyPopupProgress(
+            `正在处理第 ${largeBatchProcessing.completed} / ${total} 个URL...`,
+            largeBatchProcessing.completed,
+            total,
+            batch[batch.length - 1]?.url || ''
+          );
+        }
+        
+        // 立即清理当前批次的标签页，释放内存
+        batchTabs.forEach(tab => {
+          largeBatchProcessing.activeTabs.delete(tab.id);
+        });
+        
+        await Promise.all(batchTabs.map(tab => 
+          browser.tabs.remove(tab.id).catch(error => 
+            console.error(`Failed to remove tab ${tab.id}:`, error)
+          )
+        ));
+        
+        // 短暂延迟，避免浏览器过载
+        if (i + MAX_CONCURRENT_TABS < total && !largeBatchProcessing.isCancelled) {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
       }
 
-      // 清理标签页
-
-      await Promise.all(tabs.map(tab => browser.tabs.remove(tab.id)));
+      // 处理完成后不再需要清理标签页，因为已经分批清理了
+      
+      // 标记大批量处理完成
+      if (isLargeBatch) {
+        largeBatchProcessing.isActive = false;
+        await notifyPopupProgress('处理完成', largeBatchProcessing.completed, total, '');
+      }
 
       // 合并所有 markdown 内容
       const mergedMarkdown = mergeMarkdownDocuments(collectedMarkdown);
@@ -1459,7 +1571,7 @@ async function handleBatchLinksSelected(message) {
       
       // 清除徽章
       await browser.action.setBadgeText({ text: '' });
-              await browser.action.setTitle({ title: 'ClipMark' });
+      await browser.action.setTitle({ title: 'ClipMark' });
       
 
 
@@ -1474,6 +1586,117 @@ async function handleBatchLinksSelected(message) {
     
   } catch (error) {
     console.error('Error handling batch links selected:', error);
+    // 清理大批量处理状态
+    if (largeBatchProcessing.isActive) {
+      largeBatchProcessing.isActive = false;
+      largeBatchProcessing.isCancelled = true;
+    }
+  }
+}
+
+/**
+ * 通知popup显示大批量处理界面
+ */
+async function notifyPopupLargeBatch(totalUrls) {
+  try {
+    // 存储到local storage供popup读取
+    await browser.storage.local.set({
+      'large-batch-start': {
+        totalUrls: totalUrls,
+        timestamp: Date.now()
+      }
+    });
+    
+    // 打开popup（如果没有打开的话）
+    const views = browser.extension.getViews({ type: 'popup' });
+    if (views.length === 0) {
+      await browser.action.openPopup();
+    }
+  } catch (error) {
+    console.error('Failed to notify popup for large batch:', error);
+  }
+}
+
+/**
+ * 更新大批量处理进度
+ */
+async function notifyPopupProgress(status, completed, total, currentUrl) {
+  try {
+    await browser.storage.local.set({
+      'large-batch-progress': {
+        status: status,
+        completed: completed,
+        total: total,
+        currentUrl: currentUrl,
+        successful: largeBatchProcessing.successful,
+        failed: largeBatchProcessing.failed,
+        timestamp: Date.now()
+      }
+    });
+  } catch (error) {
+    console.error('Failed to update large batch progress:', error);
+  }
+}
+
+/**
+ * 处理取消大批量处理
+ */
+async function handleCancelLargeBatch() {
+  if (largeBatchProcessing.isActive) {
+    largeBatchProcessing.isCancelled = true;
+    largeBatchProcessing.isActive = false;
+    
+    // 关闭所有活跃的标签页
+    const tabsToClose = Array.from(largeBatchProcessing.activeTabs);
+    if (tabsToClose.length > 0) {
+      await Promise.all(
+        tabsToClose.map(tabId => 
+          browser.tabs.remove(tabId).catch(error => 
+            console.error(`Failed to close tab ${tabId}:`, error)
+          )
+        )
+      );
+    }
+    
+    largeBatchProcessing.activeTabs.clear();
+    
+    // 清除徽章
+    await browser.action.setBadgeText({ text: '!' });
+    await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
+    await browser.action.setTitle({ title: 'ClipMark - 批量处理已取消' });
+    
+    // 如果有已处理的内容，仍然生成预览
+    if (largeBatchProcessing.collectedMarkdown.length > 0) {
+      const mergedMarkdown = mergeMarkdownDocuments(largeBatchProcessing.collectedMarkdown);
+      const mergedTitle = `批量转换文档集合 (已处理 ${largeBatchProcessing.collectedMarkdown.length} 个，已取消)`;
+      await openBatchPreviewFromBackground(mergedMarkdown, mergedTitle);
+    }
+    
+    console.log(`Large batch processing cancelled. Processed: ${largeBatchProcessing.completed}/${largeBatchProcessing.totalUrls}`);
+  }
+}
+
+/**
+ * 处理暂停大批量处理
+ */
+async function handlePauseLargeBatch() {
+  if (largeBatchProcessing.isActive) {
+    largeBatchProcessing.isPaused = true;
+    await browser.action.setBadgeText({ text: '⏸' });
+    await browser.action.setTitle({ title: 'ClipMark - 批量处理已暂停' });
+    console.log('Large batch processing paused');
+  }
+}
+
+/**
+ * 处理恢复大批量处理
+ */
+async function handleResumeLargeBatch() {
+  if (largeBatchProcessing.isActive && largeBatchProcessing.isPaused) {
+    largeBatchProcessing.isPaused = false;
+    await browser.action.setBadgeText({ text: '...' });
+    await browser.action.setTitle({ title: 'ClipMark - 批量处理已恢复' });
+    console.log('Large batch processing resumed');
   }
 }
 

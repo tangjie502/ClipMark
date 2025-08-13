@@ -58,6 +58,7 @@
 
 body {
     width: 380px;
+    min-width: 380px;
     min-height: 540px;
     max-height: 600px;
     border-radius: 0.5em;
@@ -67,6 +68,13 @@ body {
     background: var(--bg);
     font-size: var(--font-size);
     color: var(--fg);
+}
+
+/* 大批量处理时扩展弹窗尺寸 */
+body.large-batch-mode {
+    width: 480px;
+    min-width: 480px;
+    max-height: 700px;
 }
 
 body::-webkit-scrollbar {
@@ -1049,5 +1057,229 @@ a.button {
     
     .action-row.selection-actions {
         flex-direction: column;
+    }
+}
+
+/* ===== 大批量处理界面样式 ===== */
+#largeBatchContainer {
+    padding: 16px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.large-batch-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.cancel-button {
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cancel-button:hover {
+    background: #d32f2f;
+    transform: scale(1.05);
+}
+
+.batch-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    border: 1px solid var(--border-primary);
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--primary);
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--fg-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.large-progress-container {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.large-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+#largeProgressStatus {
+    font-weight: 500;
+    color: var(--fg);
+}
+
+#largeProgressPercent {
+    font-weight: bold;
+    color: var(--primary);
+    font-size: 16px;
+}
+
+.large-progress-bar-container {
+    width: 100%;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.large-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 4px;
+}
+
+.batch-time-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--fg-primary);
+}
+
+.current-processing {
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.processing-label {
+    font-size: 11px;
+    color: var(--fg-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.processing-url {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--fg);
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+.batch-log-container {
+    flex: 1;
+    min-height: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.toggle-log-button {
+    background: none;
+    border: none;
+    color: var(--primary);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    transition: background 0.2s ease;
+}
+
+.toggle-log-button:hover {
+    background: rgba(74, 144, 226, 0.1);
+}
+
+.batch-log {
+    height: 100px;
+    overflow-y: auto;
+    padding: 8px;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    background: var(--bg);
+}
+
+.log-entry {
+    margin-bottom: 2px;
+    padding: 2px 0;
+}
+
+.log-entry.success {
+    color: var(--success);
+}
+
+.log-entry.error {
+    color: #f44336;
+}
+
+.log-entry.info {
+    color: var(--fg-primary);
+}
+
+.large-batch-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+/* 响应式调整 */
+@media (max-width: 500px) {
+    body.large-batch-mode {
+        width: 100vw;
+        min-width: 100vw;
+        max-width: 100vw;
+    }
+    
+    .batch-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    
+    .stat-item {
+        padding: 8px;
     }
 }

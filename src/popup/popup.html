@@ -145,6 +145,65 @@
       <div id="currentUrl"></div>
   </div>
 </div>
+
+<!-- 大批量处理专用界面 -->
+<div id="largeBatchContainer" style="display: none;">
+    <div class="large-batch-header">
+        <h2 class="batch-title">🚀 批量处理进行中</h2>
+        <button class="cancel-button" id="cancelLargeBatch" title="取消处理">❌</button>
+    </div>
+    
+    <div class="batch-stats">
+        <div class="stat-item">
+            <div class="stat-value" id="completedCount">0</div>
+            <div class="stat-label">已完成</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="totalCount">0</div>
+            <div class="stat-label">总数量</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="successCount">0</div>
+            <div class="stat-label">成功</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="errorCount">0</div>
+            <div class="stat-label">失败</div>
+        </div>
+    </div>
+    
+    <div class="large-progress-container">
+        <div class="large-progress-header">
+            <span id="largeProgressStatus">正在初始化...</span>
+            <span id="largeProgressPercent">0%</span>
+        </div>
+        <div class="large-progress-bar-container">
+            <div id="largeProgressBar" class="large-progress-bar"></div>
+        </div>
+        <div class="batch-time-info">
+            <span id="elapsedTime">已用时: 0秒</span>
+            <span id="estimatedTime">预计剩余: --</span>
+        </div>
+    </div>
+    
+    <div class="current-processing">
+        <div class="processing-label">当前处理:</div>
+        <div id="currentProcessingUrl" class="processing-url">--</div>
+    </div>
+    
+    <div class="batch-log-container">
+        <div class="log-header">
+            <span>处理日志</span>
+            <button id="toggleLog" class="toggle-log-button">展开</button>
+        </div>
+        <div id="batchLog" class="batch-log" style="display: none;"></div>
+    </div>
+    
+    <div class="large-batch-actions">
+        <button id="pauseResumeBatch" class="action-button secondary" style="display: none;">暂停</button>
+        <button id="completeBatch" class="action-button primary" style="display: none;">查看结果</button>
+    </div>
+</div>
   <div id="spinner"></div>
   <script type="application/javascript" src="../browser-polyfill.min.js"></script>
   <script type="application/javascript" src="popup.js"></script>

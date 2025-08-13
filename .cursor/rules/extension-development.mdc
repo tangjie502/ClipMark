@@ -1,0 +1,81 @@
+---
+description: "浏览器扩展开发规范和最佳实践"
+---
+
+# ClipMark 浏览器扩展开发规范
+
+## 🚀 Manifest V3 开发标准
+
+### Service Worker 使用规范
+- 使用 **service-worker.js** 替代传统的background scripts
+- 确保所有后台逻辑在Service Worker中处理
+- 避免长时间运行的后台进程，使用事件驱动模式
+
+### 权限管理原则
+参考 [manifest.json](mdc:src/manifest.json) 中的权限配置：
+```json
+"permissions": [
+  "activeTab",      // 当前标签页访问
+  "downloads",      // 文件下载权限
+  "storage",        // 本地存储权限
+  "contextMenus",   // 右键菜单权限
+  "clipboardWrite", // 剪贴板写入权限
+  "scripting",      // 脚本注入权限
+  "offscreen"       // 离屏页面权限
+]
+```
+
+**最小权限原则：** 只请求必需的权限，避免过度权限申请。
+
+## 🏗️ 组件开发规范
+
+### Content Scripts 开发
+- **注入时机：** 使用 `"run_at": "document_end"` 确保DOM完全加载
+- **隔离性：** Content Scripts在隔离的上下文中运行，与页面脚本分离
+- **通信方式：** 使用 `chrome.runtime.sendMessage()` 与后台通信
+
+### Popup 界面开发
+- **响应式设计：** 支持不同屏幕尺寸和浏览器窗口大小
+- **快速加载：** 优化资源加载，确保快速打开
+- **状态管理：** 使用 `chrome.storage` API 持久化用户设置
+
+### Options 页面开发
+- **设置项同步：** 确保设置在所有扩展组件间同步
+- **用户体验：** 提供清晰的设置说明和即时反馈
+- **默认值：** 参考 [default-options.js](mdc:src/shared/default-options.js) 设置合理默认值
+
+## 🔄 跨浏览器兼容性
+
+### API 兼容性处理
+- 使用 **browser-polyfill** 确保Firefox兼容性
+- Chrome使用 `chrome.*` API，Firefox使用 `browser.*` API
+- 统一使用Promise-based API调用
+
+### Safari 特殊处理
+- Safari使用独立的Xcode项目包装
+- 注意Safari的安全限制和API差异
+- 使用Safari Web Extension API进行适配
+
+## 🛡️ 安全开发准则
+
+### Content Security Policy (CSP)
+- 遵循严格的CSP策略
+- 避免使用 `eval()` 和内联脚本
+- 所有外部资源必须明确声明
+
+### 数据安全
+- 敏感数据使用 `chrome.storage.local` 而非 `localStorage`
+- 避免在Content Scripts中处理敏感信息
+- 实施适当的输入验证和清理
+
+## 📋 开发调试指南
+
+### 本地调试
+1. 在 `chrome://extensions/` 开启开发者模式
+2. 使用"加载已解压的扩展程序"加载 `src` 目录
+3. 使用浏览器开发者工具调试各个组件
+
+### 错误处理
+- 在Service Worker中实施全局错误捕获
+- 为用户提供友好的错误消息
+- 记录详细的调试信息便于问题排查

@@ -99,6 +99,28 @@ document.getElementById("convertUrls").addEventListener("click", handleBatchConv
 document.getElementById("cancelBatch").addEventListener("click", hideBatchProcess);
 document.getElementById("selectFromPage").addEventListener("click", startPageLinkSelection);
 
+// 大批量处理界面事件监听器
+document.addEventListener('DOMContentLoaded', () => {
+    // 只有当元素存在时才添加监听器
+    const cancelLargeBatchBtn = document.getElementById("cancelLargeBatch");
+    const toggleLogBtn = document.getElementById("toggleLog");
+    const pauseResumeBtn = document.getElementById("pauseResumeBatch");
+    const completeBatchBtn = document.getElementById("completeBatch");
+    
+    if (cancelLargeBatchBtn) {
+        cancelLargeBatchBtn.addEventListener("click", cancelLargeBatchProcess);
+    }
+    if (toggleLogBtn) {
+        toggleLogBtn.addEventListener("click", toggleBatchLog);
+    }
+    if (pauseResumeBtn) {
+        pauseResumeBtn.addEventListener("click", pauseResumeLargeBatch);
+    }
+    if (completeBatchBtn) {
+        completeBatchBtn.addEventListener("click", completeLargeBatch);
+    }
+});
+
 // 链接选择功能集成
 document.addEventListener('DOMContentLoaded', async () => {
     // 批量链接处理现在直接在 service worker 中完成，不需要在弹窗中检查
@@ -131,10 +153,227 @@ function fillBatchUrls(urlText) {
 
 // 批量链接选择现在直接在 service worker 中处理完成
 
+// 大批量处理全局变量
+let largeBatchState = {
+    isActive: false,
+    isPaused: false,
+    isCancelled: false,
+    startTime: null,
+    totalUrls: 0,
+    completed: 0,
+    successful: 0,
+    failed: 0,
+    currentBatch: 0,
+    estimatedTimeRemaining: 0,
+    progressPollingInterval: null
+};
+
+let largeBatchUI = {
+    container: document.getElementById('largeBatchContainer'),
+    completedCount: document.getElementById('completedCount'),
+    totalCount: document.getElementById('totalCount'),
+    successCount: document.getElementById('successCount'),
+    errorCount: document.getElementById('errorCount'),
+    progressBar: document.getElementById('largeProgressBar'),
+    progressStatus: document.getElementById('largeProgressStatus'),
+    progressPercent: document.getElementById('largeProgressPercent'),
+    currentUrl: document.getElementById('currentProcessingUrl'),
+    elapsedTime: document.getElementById('elapsedTime'),
+    estimatedTime: document.getElementById('estimatedTime'),
+    batchLog: document.getElementById('batchLog'),
+    cancelButton: document.getElementById('cancelLargeBatch'),
+    pauseResumeButton: document.getElementById('pauseResumeBatch'),
+    completeButton: document.getElementById('completeBatch')
+};
+
+// 大批量处理函数
+function showLargeBatchProgress(totalUrls) {
+    // 切换到大批量处理界面
+    document.body.classList.add('large-batch-mode');
+    document.getElementById("container").style.display = 'none';
+    document.getElementById("batchContainer").style.display = 'none';
+    largeBatchUI.container.style.display = 'flex';
+    
+    // 初始化状态
+    largeBatchState.isActive = true;
+    largeBatchState.isPaused = false;
+    largeBatchState.isCancelled = false;
+    largeBatchState.startTime = Date.now();
+    largeBatchState.totalUrls = totalUrls;
+    largeBatchState.completed = 0;
+    largeBatchState.successful = 0;
+    largeBatchState.failed = 0;
+    
+    // 初始化UI
+    updateLargeBatchUI();
+    addBatchLogEntry('开始大批量处理...', 'info');
+    
+    // 开始计时器
+    startBatchTimer();
+}
+
+function updateLargeBatchUI() {
+    if (!largeBatchUI.container) return;
+    
+    // 更新统计数据
+    largeBatchUI.completedCount.textContent = largeBatchState.completed;
+    largeBatchUI.totalCount.textContent = largeBatchState.totalUrls;
+    largeBatchUI.successCount.textContent = largeBatchState.successful;
+    largeBatchUI.errorCount.textContent = largeBatchState.failed;
+    
+    // 更新进度条
+    const percent = largeBatchState.totalUrls > 0 
+        ? Math.round((largeBatchState.completed / largeBatchState.totalUrls) * 100) 
+        : 0;
+    largeBatchUI.progressBar.style.width = `${percent}%`;
+    largeBatchUI.progressPercent.textContent = `${percent}%`;
+    
+    // 更新状态文本
+    if (largeBatchState.isCancelled) {
+        largeBatchUI.progressStatus.textContent = '已取消';
+    } else if (largeBatchState.isPaused) {
+        largeBatchUI.progressStatus.textContent = '已暂停';
+    } else if (largeBatchState.completed >= largeBatchState.totalUrls) {
+        largeBatchUI.progressStatus.textContent = '处理完成';
+        largeBatchUI.completeButton.style.display = 'inline-block';
+    } else {
+        largeBatchUI.progressStatus.textContent = `正在处理第 ${largeBatchState.completed + 1} 个URL...`;
+    }
+}
+
+function addBatchLogEntry(message, type = 'info') {
+    if (!largeBatchUI.batchLog) return;
+    
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    const timestamp = new Date().toLocaleTimeString();
+    entry.textContent = `[${timestamp}] ${message}`;
+    
+    largeBatchUI.batchLog.appendChild(entry);
+    largeBatchUI.batchLog.scrollTop = largeBatchUI.batchLog.scrollHeight;
+    
+    // 限制日志条目数量
+    const entries = largeBatchUI.batchLog.children;
+    if (entries.length > 100) {
+        largeBatchUI.batchLog.removeChild(entries[0]);
+    }
+}
+
+function startBatchTimer() {
+    const timer = setInterval(() => {
+        if (!largeBatchState.isActive) {
+            clearInterval(timer);
+            return;
+        }
+        
+        const elapsed = Math.round((Date.now() - largeBatchState.startTime) / 1000);
+        largeBatchUI.elapsedTime.textContent = `已用时: ${formatTime(elapsed)}`;
+        
+        // 计算预计剩余时间
+        if (largeBatchState.completed > 0) {
+            const avgTimePerUrl = elapsed / largeBatchState.completed;
+            const remaining = (largeBatchState.totalUrls - largeBatchState.completed) * avgTimePerUrl;
+            largeBatchUI.estimatedTime.textContent = `预计剩余: ${formatTime(Math.round(remaining))}`;
+        }
+    }, 1000);
+}
+
+function formatTime(seconds) {
+    if (seconds < 60) return `${seconds}秒`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
+    return `${Math.floor(seconds / 3600)}时${Math.floor((seconds % 3600) / 60)}分`;
+}
+
+function cancelLargeBatchProcess() {
+    if (confirm('确定要取消批量处理吗？已处理的内容将被保留。')) {
+        largeBatchState.isCancelled = true;
+        largeBatchState.isActive = false;
+        
+        // 通知service worker取消处理
+        browser.runtime.sendMessage({
+            type: 'cancel-large-batch'
+        });
+        
+        addBatchLogEntry('用户取消了批量处理', 'info');
+        updateLargeBatchUI();
+        
+        // 延迟显示完成按钮
+        setTimeout(() => {
+            largeBatchUI.completeButton.style.display = 'inline-block';
+            largeBatchUI.completeButton.textContent = '查看已处理内容';
+        }, 1000);
+    }
+}
+
+function toggleBatchLog() {
+    const log = largeBatchUI.batchLog;
+    const button = document.getElementById('toggleLog');
+    
+    if (log.style.display === 'none' || !log.style.display) {
+        log.style.display = 'block';
+        button.textContent = '收起';
+    } else {
+        log.style.display = 'none';
+        button.textContent = '展开';
+    }
+}
+
+function pauseResumeLargeBatch() {
+    largeBatchState.isPaused = !largeBatchState.isPaused;
+    const button = largeBatchUI.pauseResumeButton;
+    
+    if (largeBatchState.isPaused) {
+        button.textContent = '继续';
+        addBatchLogEntry('批量处理已暂停', 'info');
+        // 通知service worker暂停
+        browser.runtime.sendMessage({
+            type: 'pause-large-batch'
+        });
+    } else {
+        button.textContent = '暂停';
+        addBatchLogEntry('批量处理已恢复', 'info');
+        // 通知service worker恢复
+        browser.runtime.sendMessage({
+            type: 'resume-large-batch'
+        });
+    }
+    
+    updateLargeBatchUI();
+}
+
+function completeLargeBatch() {
+    largeBatchState.isActive = false;
+    
+    // 停止进度轮询
+    if (largeBatchState.progressPollingInterval) {
+        clearInterval(largeBatchState.progressPollingInterval);
+    }
+    
+    // 返回正常界面
+    document.body.classList.remove('large-batch-mode');
+    document.getElementById("container").style.display = 'flex';
+    largeBatchUI.container.style.display = 'none';
+    
+    // 重置状态
+    largeBatchState = {
+        isActive: false,
+        isPaused: false,
+        isCancelled: false,
+        startTime: null,
+        totalUrls: 0,
+        completed: 0,
+        successful: 0,
+        failed: 0,
+        progressPollingInterval: null
+    };
+}
+
 // 检查是否有存储的提取内容
 async function checkForStoredContent() {
     try {
-        const result = await browser.storage.local.get(['extracted-content']);
+        const result = await browser.storage.local.get(['extracted-content', 'large-batch-start']);
+        
+        // 检查是否有提取的内容
         if (result['extracted-content']) {
             const data = result['extracted-content'];
             // 检查数据是否过期（5分钟）
@@ -148,9 +387,79 @@ async function checkForStoredContent() {
                 await browser.storage.local.remove(['extracted-content']);
             }
         }
+        
+        // 检查是否有大批量处理启动信号
+        if (result['large-batch-start']) {
+            const batchData = result['large-batch-start'];
+            // 检查数据是否过期（1分钟）
+            if (Date.now() - batchData.timestamp < 60 * 1000) {
+                // 显示大批量处理界面
+                showLargeBatchProgress(batchData.totalUrls);
+                // 清除启动信号
+                await browser.storage.local.remove(['large-batch-start']);
+                
+                // 开始监听进度更新
+                startLargeBatchProgressPolling();
+            } else {
+                // 清除过期数据
+                await browser.storage.local.remove(['large-batch-start']);
+            }
+        }
     } catch (error) {
         console.error('Error checking stored content:', error);
     }
+}
+
+// 轮询大批量处理进度更新
+function startLargeBatchProgressPolling() {
+    if (largeBatchState.progressPollingInterval) {
+        clearInterval(largeBatchState.progressPollingInterval);
+    }
+    
+    largeBatchState.progressPollingInterval = setInterval(async () => {
+        if (!largeBatchState.isActive) {
+            clearInterval(largeBatchState.progressPollingInterval);
+            return;
+        }
+        
+        try {
+            const result = await browser.storage.local.get(['large-batch-progress']);
+            if (result['large-batch-progress']) {
+                const progressData = result['large-batch-progress'];
+                
+                // 检查数据是否太旧（超过5秒）
+                if (Date.now() - progressData.timestamp < 5000) {
+                    // 更新UI状态
+                    largeBatchState.completed = progressData.completed;
+                    largeBatchState.successful = progressData.successful;
+                    largeBatchState.failed = progressData.failed;
+                    
+                    // 更新界面显示
+                    updateLargeBatchUI();
+                    
+                    // 更新当前处理的URL
+                    if (progressData.currentUrl && largeBatchUI.currentUrl) {
+                        largeBatchUI.currentUrl.textContent = progressData.currentUrl;
+                    }
+                    
+                    // 添加日志条目
+                    if (progressData.status) {
+                        if (progressData.status.includes('Error') || progressData.status.includes('失败')) {
+                            addBatchLogEntry(progressData.status, 'error');
+                        } else if (progressData.status.includes('完成')) {
+                            addBatchLogEntry(progressData.status, 'success');
+                            // 处理完成，停止轮询
+                            largeBatchState.isActive = false;
+                        } else {
+                            addBatchLogEntry(progressData.status, 'info');
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error polling large batch progress:', error);
+        }
+    }, 1000); // 每秒检查一次
 }
 
 // 打开预览页面
