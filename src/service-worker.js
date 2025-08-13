@@ -70,6 +70,10 @@ async function handleMessages(message, sender, sendResponse) {
       await extractContentForPreview(message, sendResponse);
       break;
 
+    case "get-batch-status":
+      await handleGetBatchStatus(message, sendResponse);
+      break;
+
     case "forward-get-article-content":
       await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
       break;
@@ -1954,6 +1958,13 @@ async function extractContentForPreview(message, sendResponse) {
       console.error('Failed to send error message:', sendError);
     }
   }
+}
+
+/**
+ * Handle batch status query
+ */
+async function handleGetBatchStatus(message, sendResponse) {
+  sendResponse(largeBatchProcessing);
 }
 
 // Add polyfill for String.prototype.replaceAll if needed

@@ -371,7 +371,7 @@ function completeLargeBatch() {
 // 检查是否有存储的提取内容
 async function checkForStoredContent() {
     try {
-        const result = await browser.storage.local.get(['extracted-content', 'large-batch-start']);
+        const result = await browser.storage.local.get(['extracted-content', 'large-batch-start', 'large-batch-progress']);
         
         // 检查是否有提取的内容
         if (result['extracted-content']) {
@@ -404,6 +404,47 @@ async function checkForStoredContent() {
                 // 清除过期数据
                 await browser.storage.local.remove(['large-batch-start']);
             }
+        }
+        
+        // 检查是否有正在进行的批量处理任务
+        if (result['large-batch-progress']) {
+            const progressData = result['large-batch-progress'];
+            // 检查进度数据是否仍然有效（不超过30秒）
+            if (Date.now() - progressData.timestamp < 30 * 1000) {
+                // 如果还没有显示大批量处理界面，则显示它
+                if (!largeBatchState.isActive) {
+                    showLargeBatchProgress(progressData.total);
+                    // 立即更新进度状态
+                    largeBatchState.completed = progressData.completed;
+                    largeBatchState.successful = progressData.successful;
+                    largeBatchState.failed = progressData.failed;
+                    updateLargeBatchUI();
+                    
+                    // 开始监听进度更新
+                    startLargeBatchProgressPolling();
+                }
+            } else {
+                // 清除过期的进度数据
+                await browser.storage.local.remove(['large-batch-progress']);
+            }
+        }
+        
+        // 额外检查：查询service worker中的批量处理状态
+        try {
+            const batchStatus = await browser.runtime.sendMessage({ type: 'get-batch-status' });
+            if (batchStatus && batchStatus.isActive && !largeBatchState.isActive) {
+                // 如果service worker中有活跃的批量处理，但popup中没有显示，则显示它
+                showLargeBatchProgress(batchStatus.totalUrls || 1);
+                largeBatchState.completed = batchStatus.completed || 0;
+                largeBatchState.successful = batchStatus.successful || 0;
+                largeBatchState.failed = batchStatus.failed || 0;
+                updateLargeBatchUI();
+                
+                // 开始监听进度更新
+                startLargeBatchProgressPolling();
+            }
+        } catch (error) {
+            console.error('Error querying batch status from service worker:', error);
         }
     } catch (error) {
         console.error('Error checking stored content:', error);
