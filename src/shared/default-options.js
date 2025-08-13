@@ -33,6 +33,15 @@ const defaultOptions = {
   obsidianIntegration: false,
   obsidianVault: "",
   obsidianFolder: "",
+  // 新增：Obsidian Local REST API 配置
+  obsidianApiEnabled: true,  // 默认启用REST API方式
+  obsidianApiUrl: "http://127.0.0.1:27123",
+  obsidianApiKey: "",
+  obsidianApiSecure: false,
+  obsidianApiPort: "27123",
+  // 传统 URI 方式配置
+  obsidianVaultUri: "",
+  obsidianFolderUri: ""
 }
 
 // function to get the options from storage and substitute default options if it fails

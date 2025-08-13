@@ -20,6 +20,15 @@ const saveOptions = e => {
         obsidianIntegration: document.querySelector("[name='obsidianIntegration']").checked,
         obsidianVault: document.querySelector("[name='obsidianVault']").value,
         obsidianFolder: document.querySelector("[name='obsidianFolder']").value,
+        // 新增：Obsidian Local REST API 配置
+        obsidianApiEnabled: document.querySelector("[name='obsidianApiType']:checked")?.value === "rest",
+        obsidianApiUrl: document.querySelector("[name='obsidianApiUrl']")?.value || "http://127.0.0.1:27123",
+        obsidianApiKey: document.querySelector("[name='obsidianApiKey']")?.value || "",
+        obsidianApiSecure: document.querySelector("[name='obsidianApiSecure']")?.checked || false,
+        obsidianApiPort: document.querySelector("[name='obsidianApiPort']")?.value || "27123",
+        // 传统 URI 方式配置
+        obsidianVaultUri: document.querySelector("[name='obsidianVaultUri']")?.value || "",
+        obsidianFolderUri: document.querySelector("[name='obsidianFolderUri']")?.value || "",
 
         preserveCodeFormatting: document.querySelector("[name='preserveCodeFormatting']").checked,
 
@@ -144,6 +153,20 @@ const setCurrentChoice = result => {
     document.querySelector("[name='obsidianIntegration']").checked = options.obsidianIntegration;
     document.querySelector("[name='obsidianVault']").value = options.obsidianVault;
     document.querySelector("[name='obsidianFolder']").value = options.obsidianFolder;
+    
+    // 修复：正确设置单选按钮的选中状态
+    if (options.obsidianApiEnabled) {
+        document.querySelector("[name='obsidianApiType'][value='rest']").checked = true;
+    } else {
+        document.querySelector("[name='obsidianApiType'][value='uri']").checked = true;
+    }
+    
+    document.querySelector("[name='obsidianApiUrl']").value = options.obsidianApiUrl;
+    document.querySelector("[name='obsidianApiKey']").value = options.obsidianApiKey;
+    document.querySelector("[name='obsidianApiSecure']").checked = options.obsidianApiSecure;
+    document.querySelector("[name='obsidianApiPort']").value = options.obsidianApiPort;
+    document.querySelector("[name='obsidianVaultUri']").value = options.obsidianVaultUri;
+    document.querySelector("[name='obsidianFolderUri']").value = options.obsidianFolderUri;
 
     // Set preserveCodeFormatting checkbox
     document.querySelector("[name='preserveCodeFormatting']").checked = options.preserveCodeFormatting;
@@ -173,6 +196,21 @@ const setCurrentChoice = result => {
 const restoreOptions = async () => {
     try {
         const result = await browser.storage.sync.get(defaultOptions);
+        
+        // 初始化：如果是首次使用，设置默认的Obsidian配置
+        if (!result.hasOwnProperty('obsidianApiEnabled')) {
+            result.obsidianApiEnabled = true;  // 默认启用REST API
+            result.obsidianApiUrl = "http://127.0.0.1:27123";
+            result.obsidianApiPort = "27123";
+            result.obsidianApiSecure = false;
+            result.obsidianApiKey = "";
+            result.obsidianVaultUri = "";
+            result.obsidianFolderUri = "";
+            
+            // 保存初始化后的配置
+            await browser.storage.sync.set(result);
+        }
+        
         setCurrentChoice(result);
     } catch (error) {
         console.error('Error restoring options:', error);
@@ -213,7 +251,41 @@ const refereshElements = () => {
     document.getElementById('obsidian').disabled = !downloadImages;
     document.getElementById('obsidian-nofolder').disabled = !downloadImages;
 
+    // Obsidian 集成配置显示逻辑
+    const obsidianEnabled = options.obsidianIntegration;
+    const obsidianApiType = options.obsidianApiEnabled ? "rest" : "uri";
     
+    // 修复：确保正确显示配置选项
+    const obsidianApiConfig = document.getElementById("obsidianApiConfig");
+    const obsidianUriConfig = document.getElementById("obsidianUriConfig");
+    
+    if (obsidianApiConfig) {
+        show(obsidianApiConfig, obsidianEnabled && obsidianApiType === "rest");
+    }
+    
+    if (obsidianUriConfig) {
+        show(obsidianUriConfig, obsidianEnabled && obsidianApiType === "uri");
+    }
+    
+    // 调试信息
+    console.log('Obsidian config display logic:', {
+        obsidianEnabled,
+        obsidianApiEnabled: options.obsidianApiEnabled,
+        obsidianApiType,
+        showApiConfig: obsidianEnabled && obsidianApiType === "rest",
+        showUriConfig: obsidianEnabled && obsidianApiType === "uri",
+        elementsFound: {
+            obsidianApiConfig: !!obsidianApiConfig,
+            obsidianUriConfig: !!obsidianUriConfig
+        }
+    });
+    
+    // 强制显示/隐藏调试
+    if (obsidianApiConfig) {
+        console.log('obsidianApiConfig element:', obsidianApiConfig);
+        console.log('obsidianApiConfig display style:', obsidianApiConfig.style.display);
+        console.log('obsidianApiConfig visibility:', obsidianApiConfig.style.visibility);
+    }
 }
 
 const inputChange = e => {
@@ -371,7 +443,14 @@ function getCurrentFormData() {
         linkReferenceStyle: getCheckedValue(document.querySelectorAll("input[name='linkReferenceStyle']")),
         imageStyle: getCheckedValue(document.querySelectorAll("input[name='imageStyle']")),
         imageRefStyle: getCheckedValue(document.querySelectorAll("input[name='imageRefStyle']")),
-        downloadMode: getCheckedValue(document.querySelectorAll("input[name='downloadMode']"))
+        downloadMode: getCheckedValue(document.querySelectorAll("input[name='downloadMode']")),
+        obsidianApiEnabled: document.querySelector("[name='obsidianApiType']:checked")?.value === "rest",
+        obsidianApiUrl: document.querySelector("[name='obsidianApiUrl']")?.value || "http://127.0.0.1:27123",
+        obsidianApiKey: document.querySelector("[name='obsidianApiKey']")?.value || "",
+        obsidianApiSecure: document.querySelector("[name='obsidianApiSecure']")?.checked || false,
+        obsidianApiPort: document.querySelector("[name='obsidianApiPort']")?.value || "27123",
+        obsidianVaultUri: document.querySelector("[name='obsidianVaultUri']")?.value || "",
+        obsidianFolderUri: document.querySelector("[name='obsidianFolderUri']")?.value || "",
     };
 }
 
@@ -540,6 +619,29 @@ function initializeOptionsPage() {
         closeBtn.addEventListener('click', handleClose);
     }
     
+    // 绑定 Obsidian API 类型选择事件
+    const obsidianApiTypeRadios = document.querySelectorAll('input[name="obsidianApiType"]');
+    obsidianApiTypeRadios.forEach(radio => {
+        radio.addEventListener('change', () => {
+            console.log('Obsidian API type changed to:', radio.value);
+            refereshElements();
+            trackFormChanges();
+        });
+    });
+    
+    // 绑定 Obsidian 集成启用/禁用事件
+    const obsidianIntegrationCheckbox = document.querySelector('[name="obsidianIntegration"]');
+    if (obsidianIntegrationCheckbox) {
+        obsidianIntegrationCheckbox.addEventListener('change', () => {
+            console.log('Obsidian integration toggled:', obsidianIntegrationCheckbox.checked);
+            refereshElements();
+            trackFormChanges();
+        });
+    }
+    
+    // 添加调试按钮（开发时使用）
+    addDebugButton();
+    
     // 监听页面卸载事件，提醒用户保存未保存的更改
     window.addEventListener('beforeunload', (event) => {
         if (hasUnsavedChanges) {
@@ -548,6 +650,49 @@ function initializeOptionsPage() {
             return message;
         }
     });
+}
+
+/**
+ * 添加调试按钮（开发时使用）
+ */
+function addDebugButton() {
+    const debugContainer = document.createElement('div');
+    debugContainer.style.cssText = 'position: fixed; top: 10px; right: 10px; z-index: 9999; background: #f0f0f0; padding: 10px; border: 1px solid #ccc; border-radius: 4px;';
+    
+    const debugBtn = document.createElement('button');
+    debugBtn.textContent = '调试 Obsidian 配置';
+    debugBtn.onclick = () => {
+        console.log('=== Obsidian 配置调试信息 ===');
+        console.log('当前选项:', options);
+        console.log('页面元素:', {
+            obsidianApiConfig: document.getElementById("obsidianApiConfig"),
+            obsidianUriConfig: document.getElementById("obsidianUriConfig"),
+            obsidianApiTypeRadios: document.querySelectorAll('input[name="obsidianApiType"]'),
+            obsidianIntegration: document.querySelector('[name="obsidianIntegration"]')
+        });
+        
+        // 强制刷新显示
+        refereshElements();
+        
+        // 手动显示配置区域
+        const apiConfig = document.getElementById("obsidianApiConfig");
+        const uriConfig = document.getElementById("obsidianUriConfig");
+        
+        if (apiConfig) {
+            apiConfig.style.display = 'block';
+            apiConfig.style.opacity = '1';
+            apiConfig.style.height = 'auto';
+        }
+        
+        if (uriConfig) {
+            uriConfig.style.display = 'block';
+            uriConfig.style.opacity = '1';
+            uriConfig.style.height = 'auto';
+        }
+    };
+    
+    debugContainer.appendChild(debugBtn);
+    document.body.appendChild(debugContainer);
 }
 
 // 在DOM加载完成后初始化

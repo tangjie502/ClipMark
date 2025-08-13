@@ -215,9 +215,15 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     const { markdown } = await convertArticleToMarkdown(article, false, options);
     await copyToClipboard(markdown);
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
-    await browser.tabs.update({
-      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title, options.disallowedChars)}`
-    });
+    
+    // 根据配置选择集成方式
+    if (options.obsidianApiEnabled && options.obsidianApiKey) {
+      // 使用 Obsidian Local REST API
+      await handleObsidianApiIntegration(article, title, markdown, options);
+    } else {
+      // 使用传统的 Advanced Obsidian URI 方式
+      await handleObsidianUriIntegration(article, title, markdown, options, tabId);
+    }
   }
   else if (info.menuItemId === "copy-markdown-obsall") {
     const article = await getArticleFromContent(tabId, false, options);  // Added options
@@ -228,9 +234,15 @@ async function handleContextMenuCopy(info, tabId, providedOptions = null) {
     const { markdown } = await convertArticleToMarkdown(article, false, options);
     await copyToClipboard(markdown);
     await executeScriptInTab(tabId, `copyToClipboard(${JSON.stringify(markdown)})`);
-    await browser.tabs.update({
-      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${obsidianFolder}${generateValidFileName(title, options.disallowedChars)}`
-    });
+    
+    // 根据配置选择集成方式
+    if (options.obsidianApiEnabled && options.obsidianApiKey) {
+      // 使用 Obsidian Local REST API
+      await handleObsidianApiIntegration(article, title, markdown, options);
+    } else {
+      // 使用传统的 Advanced Obsidian URI 方式
+      await handleObsidianUriIntegration(article, title, markdown, options, tabId);
+    }
   }
   else {
     const article = await getArticleFromContent(tabId, info.menuItemId === "copy-markdown-selection", options);  // Added options
@@ -1415,6 +1427,88 @@ async function handleGetArticleContent(message) {
       type: 'article-error',
       requestId: message.requestId,
       error: error.message
+    });
+  }
+}
+
+/**
+ * 处理 Obsidian Local REST API 集成
+ */
+async function handleObsidianApiIntegration(article, title, markdown, options) {
+  try {
+    // 创建 Obsidian API 服务实例
+    const obsidianApi = new ObsidianApiService(options);
+    
+    // 构建文件名
+    const fileName = generateValidFileName(title, options.disallowedChars);
+    
+    // 构建 frontmatter
+    const frontmatter = {};
+    if (options.includeTemplate) {
+      // 解析现有的 frontmatter 模板
+      const frontmatterText = textReplace(options.frontmatter, article, options.disallowedChars);
+      // 这里可以添加更复杂的 frontmatter 解析逻辑
+      frontmatter.source = article.baseURI;
+      frontmatter.author = article.byline;
+      frontmatter.created = new Date().toISOString();
+      if (article.keywords && article.keywords.length > 0) {
+        frontmatter.tags = article.keywords;
+      }
+    }
+    
+    // 创建文件
+    const result = await obsidianApi.createFile(fileName, markdown, frontmatter);
+    
+    if (result.success) {
+      console.log('Successfully sent to Obsidian via REST API:', result.message);
+      
+      // 发送成功消息给 service worker 来更新徽章
+      await browser.runtime.sendMessage({
+        type: 'obsidian-success',
+        message: result.message
+      });
+    } else {
+      throw new Error(result.message);
+    }
+    
+  } catch (error) {
+    console.error('Failed to send to Obsidian via REST API:', error);
+    
+    // 发送错误消息给 service worker 来处理
+    await browser.runtime.sendMessage({
+      type: 'obsidian-error',
+      error: error.message,
+      fallback: true
+    });
+  }
+}
+
+/**
+ * 处理传统的 Advanced Obsidian URI 集成
+ */
+async function handleObsidianUriIntegration(article, title, markdown, options, tabId) {
+  try {
+    // 构建 Obsidian URI
+    const obsidianVault = options.obsidianVaultUri || options.obsidianVault;
+    const obsidianFolder = await formatObsidianFolder(article, options);
+    const filePath = obsidianFolder + generateValidFileName(title, options.disallowedChars);
+    
+    // 发送消息给 service worker 来处理 Obsidian URI 打开
+    await browser.runtime.sendMessage({
+      type: 'open-obsidian-uri',
+      url: `obsidian://advanced-uri?vault=${obsidianVault}&clipboard=true&mode=new&filepath=${encodeURIComponent(filePath)}`
+    });
+    
+    console.log('Successfully sent to Obsidian via Advanced URI');
+    
+  } catch (error) {
+    console.error('Failed to send to Obsidian via Advanced URI:', error);
+    
+    // 发送错误消息给 service worker 来处理
+    await browser.runtime.sendMessage({
+      type: 'obsidian-error',
+      error: error.message,
+      fallback: false
     });
   }
 }

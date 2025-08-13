@@ -2,6 +2,7 @@ importScripts(
   'browser-polyfill.min.js',
   'background/moment.min.js',
   'background/apache-mime-types.js',
+  'background/obsidian-api.js',
   'shared/default-options.js',
   'shared/context-menus.js'
 );
@@ -92,6 +93,19 @@ async function handleMessages(message, sender, sendResponse) {
 
     case "execute-content-download":
       await executeContentDownload(message.tabId, message.filename, message.content);
+      break;
+      
+    // 新增：处理 Obsidian 相关消息
+    case "obsidian-success":
+      await handleObsidianSuccess(message.message);
+      break;
+      
+    case "obsidian-error":
+      await handleObsidianError(message.error, message.fallback);
+      break;
+      
+    case "open-obsidian-uri":
+      await handleOpenObsidianUri(message.url);
       break;
   }
   
@@ -867,65 +881,31 @@ async function copyMarkdownFromContext(info, tab) {
         const article = await getArticleFromContent(tab.id, true);
         const title = article.title;
         const options = await getOptions();
-        const obsidianVault = options.obsidianVault;
-        const obsidianFolder = await formatObsidianFolder(article);
         const { markdown } = await convertArticleToMarkdown(article, false);
         
-        await browser.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: (markdownText) => {
-            if (typeof copyToClipboard === 'function') {
-              copyToClipboard(markdownText);
-            } else {
-              // Fallback clipboard implementation
-              const textarea = document.createElement('textarea');
-              textarea.value = markdownText;
-              textarea.style.position = 'fixed';
-              textarea.style.left = '-999999px';
-              document.body.appendChild(textarea);
-              textarea.select();
-              document.execCommand('copy');
-              document.body.removeChild(textarea);
-            }
-          },
-          args: [markdown]
-        });
-        
-        await browser.tabs.update({
-          url: `obsidian://advanced-uri?vault=${encodeURIComponent(obsidianVault)}&clipboard=true&mode=new&filepath=${encodeURIComponent(obsidianFolder + generateValidFileName(title))}`
-        });
+        // 根据配置选择集成方式
+        if (options.obsidianApiEnabled && options.obsidianApiKey) {
+          // 使用 Obsidian Local REST API
+          await handleObsidianApiIntegration(article, title, markdown, options);
+        } else {
+          // 使用传统的 Advanced Obsidian URI 方式
+          await handleObsidianUriIntegration(article, title, markdown, options, tab.id);
+        }
       }
       else if(info.menuItemId == "copy-markdown-obsall") {
         const article = await getArticleFromContent(tab.id, false);
         const title = article.title;
         const options = await getOptions();
-        const obsidianVault = options.obsidianVault;
-        const obsidianFolder = await formatObsidianFolder(article);
         const { markdown } = await convertArticleToMarkdown(article, false);
         
-        await browser.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: (markdownText) => {
-            if (typeof copyToClipboard === 'function') {
-              copyToClipboard(markdownText);
-            } else {
-              // Fallback clipboard implementation
-              const textarea = document.createElement('textarea');
-              textarea.value = markdownText;
-              textarea.style.position = 'fixed';
-              textarea.style.left = '-999999px';
-              document.body.appendChild(textarea);
-              textarea.select();
-              document.execCommand('copy');
-              document.body.removeChild(textarea);
-            }
-          },
-          args: [markdown]
-        });
-        
-        await browser.tabs.update({
-          url: `obsidian://advanced-uri?vault=${encodeURIComponent(obsidianVault)}&clipboard=true&mode=new&filepath=${encodeURIComponent(obsidianFolder + generateValidFileName(title))}`
-        });
+        // 根据配置选择集成方式
+        if (options.obsidianApiEnabled && options.obsidianApiKey) {
+          // 使用 Obsidian Local REST API
+          await handleObsidianApiIntegration(article, title, markdown, options);
+        } else {
+          // 使用传统的 Advanced Obsidian URI 方式
+          await handleObsidianUriIntegration(article, title, markdown, options, tab.id);
+        }
       }
       else {
         const article = await getArticleFromContent(tab.id, info.menuItemId == "copy-markdown-selection");
@@ -2002,4 +1982,210 @@ if (!String.prototype.replaceAll) {
     }
     return this.replace(new RegExp(str, 'g'), newStr);
   };
+}
+
+/**
+ * 处理 Obsidian Local REST API 集成
+ */
+async function handleObsidianApiIntegration(article, title, markdown, options) {
+  try {
+    // 创建 Obsidian API 服务实例
+    const obsidianApi = new ObsidianApiService(options);
+    
+    // 构建文件名
+    const fileName = generateValidFileName(title, options.disallowedChars);
+    
+    // 构建 frontmatter
+    const frontmatter = {};
+    if (options.includeTemplate) {
+      // 解析现有的 frontmatter 模板
+      const frontmatterText = textReplace(options.frontmatter, article, options.disallowedChars);
+      // 这里可以添加更复杂的 frontmatter 解析逻辑
+      frontmatter.source = article.baseURI;
+      frontmatter.author = article.byline;
+      frontmatter.created = new Date().toISOString();
+      if (article.keywords && article.keywords.length > 0) {
+        frontmatter.tags = article.keywords;
+      }
+    }
+    
+    // 创建文件
+    const result = await obsidianApi.createFile(fileName, markdown, frontmatter);
+    
+    if (result.success) {
+      // 显示成功通知
+      await browser.action.setBadgeText({ text: '✓' });
+      await browser.action.setBadgeBackgroundColor({ color: '#4caf50' });
+      await browser.action.setTitle({ title: 'ClipMark - 已成功发送到 Obsidian' });
+      
+      // 3秒后清除徽章
+      setTimeout(async () => {
+        await browser.action.setBadgeText({ text: '' });
+        await browser.action.setTitle({ title: 'ClipMark' });
+      }, 3000);
+      
+      console.log('Successfully sent to Obsidian via REST API:', result.message);
+    } else {
+      throw new Error(result.message);
+    }
+    
+  } catch (error) {
+    console.error('Failed to send to Obsidian via REST API:', error);
+    
+    // 显示错误通知
+    await browser.action.setBadgeText({ text: '✗' });
+    await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
+    await browser.action.setTitle({ title: `ClipMark - 发送到 Obsidian 失败: ${error.message}` });
+    
+    // 5秒后清除徽章
+    setTimeout(async () => {
+      await browser.action.setBadgeText({ text: '' });
+      await browser.action.setTitle({ title: 'ClipMark' });
+    }, 5000);
+    
+    // 如果 REST API 失败，可以回退到传统方式
+    console.log('Falling back to traditional Obsidian URI method...');
+    await handleObsidianUriIntegration(article, title, markdown, options);
+  }
+}
+
+/**
+ * 处理传统的 Advanced Obsidian URI 集成
+ */
+async function handleObsidianUriIntegration(article, title, markdown, options, tabId) {
+  try {
+    // 复制 markdown 到剪贴板
+    if (tabId) {
+      await browser.scripting.executeScript({
+        target: { tabId: tabId },
+        func: (markdownText) => {
+          if (typeof copyToClipboard === 'function') {
+            copyToClipboard(markdownText);
+          } else {
+            // Fallback clipboard implementation
+            const textarea = document.createElement('textarea');
+            textarea.value = markdownText;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-999999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+          }
+        },
+        args: [markdown]
+      });
+    }
+    
+    // 构建 Obsidian URI
+    const obsidianVault = options.obsidianVaultUri || options.obsidianVault;
+    const obsidianFolder = await formatObsidianFolder(article);
+    const filePath = obsidianFolder + generateValidFileName(title, options.disallowedChars);
+    
+    // 打开 Obsidian URI
+    await browser.tabs.update({
+      url: `obsidian://advanced-uri?vault=${encodeURIComponent(obsidianVault)}&clipboard=true&mode=new&filepath=${encodeURIComponent(filePath)}`
+    });
+    
+    console.log('Successfully sent to Obsidian via Advanced URI');
+    
+  } catch (error) {
+    console.error('Failed to send to Obsidian via Advanced URI:', error);
+    
+    // 显示错误通知
+    await browser.action.setBadgeText({ text: '✗' });
+    await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
+    await browser.action.setTitle({ title: `ClipMark - 发送到 Obsidian 失败: ${error.message}` });
+    
+    // 5秒后清除徽章
+    setTimeout(async () => {
+      await browser.action.setBadgeText({ text: '' });
+      await browser.action.setTitle({ title: 'ClipMark' });
+    }, 5000);
+  }
+}
+
+/**
+ * 处理 Obsidian 成功消息
+ */
+async function handleObsidianSuccess(message) {
+  try {
+    // 显示成功通知
+    await browser.action.setBadgeText({ text: '✓' });
+    await browser.action.setBadgeBackgroundColor({ color: '#4caf50' });
+    await browser.action.setTitle({ title: 'ClipMark - 已成功发送到 Obsidian' });
+    
+    // 3秒后清除徽章
+    setTimeout(async () => {
+      await browser.action.setBadgeText({ text: '' });
+      await browser.action.setTitle({ title: 'ClipMark' });
+    }, 3000);
+    
+    console.log('Obsidian success:', message);
+  } catch (error) {
+    console.error('Failed to show Obsidian success notification:', error);
+  }
+}
+
+/**
+ * 处理 Obsidian 错误消息
+ */
+async function handleObsidianError(error, fallback) {
+  try {
+    // 显示错误通知
+    await browser.action.setBadgeText({ text: '✗' });
+    await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
+    await browser.action.setTitle({ title: `ClipMark - 发送到 Obsidian 失败: ${error}` });
+    
+    // 5秒后清除徽章
+    setTimeout(async () => {
+      await browser.action.setBadgeText({ text: '' });
+      await browser.action.setTitle({ title: 'ClipMark' });
+    }, 5000);
+    
+    console.error('Obsidian error:', error);
+    
+    // 如果需要回退到传统方式，这里可以添加逻辑
+    if (fallback) {
+      console.log('Fallback to traditional Obsidian URI method...');
+      // 这里可以触发回退逻辑
+    }
+  } catch (notificationError) {
+    console.error('Failed to show Obsidian error notification:', notificationError);
+  }
+}
+
+/**
+ * 处理打开 Obsidian URI
+ */
+async function handleOpenObsidianUri(url) {
+  try {
+    // 获取当前活动标签页
+    const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+    if (tabs.length > 0) {
+      // 在当前标签页中打开 Obsidian URI
+      await browser.tabs.update(tabs[0].id, { url: url });
+      console.log('Opened Obsidian URI:', url);
+    } else {
+      console.error('No active tab found to open Obsidian URI');
+    }
+  } catch (error) {
+    console.error('Failed to open Obsidian URI:', error);
+  }
+}
+
+/**
+ * Format Obsidian folder with provided options
+ */
+async function formatObsidianFolder(article, options = null) {
+  const opts = options || defaultOptions;
+  
+  let obsidianFolder = '';
+  if (opts.obsidianFolder) {
+    obsidianFolder = textReplace(opts.obsidianFolder, article, opts.disallowedChars);
+    obsidianFolder = obsidianFolder.split('/').map(s => generateValidFileName(s, opts.disallowedChars)).join('/');
+    if (!obsidianFolder.endsWith('/')) obsidianFolder += '/';
+  }
+  
+  return obsidianFolder;
 }
