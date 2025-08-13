@@ -261,7 +261,7 @@ function addBatchLogEntry(message, type = 'info') {
 
 function startBatchTimer() {
     const timer = setInterval(() => {
-        if (!largeBatchState.isActive) {
+        if (!largeBatchState.isActive || largeBatchState.isCancelled) {
             clearInterval(timer);
             return;
         }
@@ -288,6 +288,12 @@ function cancelLargeBatchProcess() {
     if (confirm('确定要取消批量处理吗？已处理的内容将被保留。')) {
         largeBatchState.isCancelled = true;
         largeBatchState.isActive = false;
+        
+        // 停止进度轮询
+        if (largeBatchState.progressPollingInterval) {
+            clearInterval(largeBatchState.progressPollingInterval);
+            largeBatchState.progressPollingInterval = null;
+        }
         
         // 通知service worker取消处理
         browser.runtime.sendMessage({
@@ -458,7 +464,7 @@ function startLargeBatchProgressPolling() {
     }
     
     largeBatchState.progressPollingInterval = setInterval(async () => {
-        if (!largeBatchState.isActive) {
+        if (!largeBatchState.isActive || largeBatchState.isCancelled) {
             clearInterval(largeBatchState.progressPollingInterval);
             return;
         }
@@ -491,6 +497,12 @@ function startLargeBatchProgressPolling() {
                             addBatchLogEntry(progressData.status, 'success');
                             // 处理完成，停止轮询
                             largeBatchState.isActive = false;
+                        } else if (progressData.status.includes('取消')) {
+                            addBatchLogEntry(progressData.status, 'info');
+                            // 处理已取消，停止轮询
+                            largeBatchState.isActive = false;
+                            largeBatchState.isCancelled = true;
+                            updateLargeBatchUI();
                         } else {
                             addBatchLogEntry(progressData.status, 'info');
                         }

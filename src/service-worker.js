@@ -74,6 +74,18 @@ async function handleMessages(message, sender, sendResponse) {
       await handleGetBatchStatus(message, sendResponse);
       break;
 
+    case "cancel-large-batch":
+      await handleCancelLargeBatch();
+      break;
+
+    case "pause-large-batch":
+      await handlePauseLargeBatch();
+      break;
+
+    case "resume-large-batch":
+      await handleResumeLargeBatch();
+      break;
+
     case "forward-get-article-content":
       await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
       break;
@@ -1560,6 +1572,12 @@ async function handleBatchLinksSelected(message) {
 
       // 处理完成后不再需要清理标签页，因为已经分批清理了
       
+      // 检查是否被取消
+      if (isLargeBatch && largeBatchProcessing.isCancelled) {
+        console.log('Batch processing was cancelled, stopping execution');
+        return;
+      }
+      
       // 标记大批量处理完成
       if (isLargeBatch) {
         largeBatchProcessing.isActive = false;
@@ -1646,13 +1664,17 @@ async function notifyPopupProgress(status, completed, total, currentUrl) {
  * 处理取消大批量处理
  */
 async function handleCancelLargeBatch() {
+  console.log('Received cancel-large-batch message');
+  
   if (largeBatchProcessing.isActive) {
+    console.log('Cancelling large batch processing...');
     largeBatchProcessing.isCancelled = true;
     largeBatchProcessing.isActive = false;
     
     // 关闭所有活跃的标签页
     const tabsToClose = Array.from(largeBatchProcessing.activeTabs);
     if (tabsToClose.length > 0) {
+      console.log(`Closing ${tabsToClose.length} active tabs...`);
       await Promise.all(
         tabsToClose.map(tabId => 
           browser.tabs.remove(tabId).catch(error => 
@@ -1669,6 +1691,9 @@ async function handleCancelLargeBatch() {
     await browser.action.setBadgeBackgroundColor({ color: '#f44336' });
     await browser.action.setTitle({ title: 'ClipMark - 批量处理已取消' });
     
+    // 更新进度状态，通知popup
+    await notifyPopupProgress('处理已取消', largeBatchProcessing.completed, largeBatchProcessing.totalUrls, '');
+    
     // 如果有已处理的内容，仍然生成预览
     if (largeBatchProcessing.collectedMarkdown.length > 0) {
       const mergedMarkdown = mergeMarkdownDocuments(largeBatchProcessing.collectedMarkdown);
@@ -1677,6 +1702,8 @@ async function handleCancelLargeBatch() {
     }
     
     console.log(`Large batch processing cancelled. Processed: ${largeBatchProcessing.completed}/${largeBatchProcessing.totalUrls}`);
+  } else {
+    console.log('No active large batch processing to cancel');
   }
 }
 
