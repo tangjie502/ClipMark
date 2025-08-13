@@ -70,13 +70,7 @@ body {
     color: var(--fg);
 }
 
-/* 大批量处理时扩展弹窗尺寸 */
-body.large-batch-mode {
-    width: 480px;
-    min-width: 480px;
-    max-height: 700px;
-}
-
+/* 普通模式下的滚动条样式 */
 body::-webkit-scrollbar {
     width: 6px;
 }
@@ -91,6 +85,35 @@ body::-webkit-scrollbar-thumb {
 }
 
 body::-webkit-scrollbar-thumb:hover {
+    background: var(--fg-primary);
+}
+
+/* 大批量处理时扩展弹窗尺寸 */
+body.large-batch-mode {
+    width: 480px;
+    min-width: 480px;
+    min-height: 700px; /* 改为min-height，允许内容扩展 */
+    max-height: none; /* 移除最大高度限制，允许内容自然扩展 */
+    overflow-y: auto; /* 确保在大批量处理模式下可以滚动 */
+    position: relative; /* 添加相对定位 */
+}
+
+body.large-batch-mode::-webkit-scrollbar {
+    width: 8px; /* 在大批量处理模式下使用稍宽的滚动条 */
+}
+
+body.large-batch-mode::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-radius: 4px;
+}
+
+body.large-batch-mode::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+    border: 2px solid var(--bg); /* 添加边框 */
+}
+
+body.large-batch-mode::-webkit-scrollbar-thumb:hover {
     background: var(--fg-primary);
 }
 
@@ -138,7 +161,8 @@ input#title {
 
 #container {
     width: 100%;
-    height: 100%;
+    height: auto; /* 改为auto，允许内容自然扩展 */
+    min-height: 100%; /* 确保最小高度 */
     display: flex;
     flex-direction: column;
     padding: 18px; /* 🎯 综合优化：适中的内边距 */
@@ -205,7 +229,8 @@ a.button {
 
 #batchContainer {
     width: 100%;
-    height: 100%;
+    height: auto; /* 改为auto，允许内容自然扩展 */
+    min-height: 100%; /* 确保最小高度 */
     display: none;
     flex-direction: column;
     padding: 0.5em;
@@ -1061,12 +1086,81 @@ a.button {
 }
 
 /* ===== 大批量处理界面样式 ===== */
+/* 确保大批量处理容器有足够的空间 */
 #largeBatchContainer {
     padding: 16px;
-    height: 100%;
+    height: auto; /* 改为auto，允许内容自然扩展 */
+    min-height: 100%; /* 确保最小高度 */
     display: flex;
     flex-direction: column;
     gap: 16px;
+    overflow: visible; /* 改为visible，允许内容溢出和滚动 */
+    position: relative; /* 添加相对定位 */
+    padding-bottom: 32px; /* 增加底部内边距，确保有足够空间 */
+}
+
+/* 确保body在大批量处理模式下可以滚动 */
+body.large-batch-mode {
+    width: 480px;
+    min-width: 480px;
+    min-height: 700px; /* 改为min-height，允许内容扩展 */
+    max-height: none; /* 移除最大高度限制，允许内容自然扩展 */
+    overflow-y: auto; /* 确保在大批量处理模式下可以滚动 */
+    position: relative; /* 添加相对定位 */
+    padding-right: 8px; /* 为滚动条留出空间 */
+}
+
+/* 大批量处理模式下的滚动条样式 */
+body.large-batch-mode::-webkit-scrollbar {
+    width: 8px; /* 在大批量处理模式下使用稍宽的滚动条 */
+}
+
+body.large-batch-mode::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-radius: 4px;
+}
+
+body.large-batch-mode::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+    border: 2px solid var(--bg); /* 添加边框 */
+}
+
+body.large-batch-mode::-webkit-scrollbar-thumb:hover {
+    background: var(--fg-primary);
+}
+
+/* 日志区域的滚动条样式 */
+.batch-log::-webkit-scrollbar {
+    width: 6px;
+}
+
+.batch-log::-webkit-scrollbar-track {
+    background: var(--bg);
+    border-radius: 3px;
+}
+
+.batch-log::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+    border: 1px solid var(--bg); /* 添加边框 */
+}
+
+.batch-log::-webkit-scrollbar-thumb:hover {
+    background: var(--fg-primary);
+}
+
+/* 确保日志容器可以正常滚动 */
+.batch-log-container {
+    flex: 1;
+    min-height: 0; /* 关键：允许flex子项收缩到内容大小 */
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: visible; /* 改为visible，允许内容溢出和滚动 */
+    display: flex;
+    flex-direction: column;
+    position: relative; /* 添加相对定位 */
+    margin-bottom: 16px; /* 添加底部间距 */
 }
 
 .large-batch-header {
@@ -1075,6 +1169,7 @@ a.button {
     align-items: center;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0; /* 防止头部被压缩 */
 }
 
 .cancel-button {
@@ -1105,6 +1200,7 @@ a.button {
     background: var(--bg-primary);
     border-radius: 8px;
     border: 1px solid var(--border-primary);
+    flex-shrink: 0; /* 防止统计区域被压缩 */
 }
 
 .stat-item {
@@ -1130,6 +1226,7 @@ a.button {
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 16px;
+    flex-shrink: 0; /* 防止进度区域被压缩 */
 }
 
 .large-progress-header {
@@ -1179,6 +1276,7 @@ a.button {
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 6px;
+    flex-shrink: 0; /* 防止当前处理区域被压缩 */
 }
 
 .processing-label {
@@ -1197,12 +1295,42 @@ a.button {
     line-height: 1.4;
 }
 
-.batch-log-container {
+.batch-log {
     flex: 1;
-    min-height: 0;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    overflow: hidden;
+    min-height: 0; /* 关键：允许日志内容区域收缩 */
+    max-height: 200px; /* 设置最大高度，确保可以滚动 */
+    overflow-y: auto; /* 启用垂直滚动 */
+    padding: 8px;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    background: var(--bg);
+    position: relative; /* 添加相对定位 */
+    border-radius: 4px; /* 添加圆角 */
+    margin-right: 4px; /* 为滚动条留出空间 */
+}
+
+/* 确保日志条目的样式正确 */
+.log-entry {
+    margin-bottom: 4px; /* 增加条目间距 */
+    padding: 2px 4px; /* 增加内边距 */
+    border-radius: 2px; /* 添加圆角 */
+    background: rgba(0, 0, 0, 0.02); /* 添加微妙的背景 */
+}
+
+.log-entry.success {
+    color: var(--success);
+    background: rgba(5, 150, 105, 0.05); /* 成功条目的背景 */
+}
+
+.log-entry.error {
+    color: #f44336;
+    background: rgba(244, 67, 54, 0.05); /* 错误条目的背景 */
+}
+
+.log-entry.info {
+    color: var(--fg-primary);
+    background: rgba(74, 144, 226, 0.05); /* 信息条目的背景 */
 }
 
 .log-header {
@@ -1214,6 +1342,8 @@ a.button {
     border-bottom: 1px solid var(--border);
     font-size: 12px;
     font-weight: 500;
+    flex-shrink: 0; /* 防止日志头部被压缩 */
+    border-radius: 6px 6px 0 0; /* 添加顶部圆角 */
 }
 
 .toggle-log-button {
@@ -1232,30 +1362,14 @@ a.button {
 }
 
 .batch-log {
-    height: 100px;
-    overflow-y: auto;
+    flex: 1;
+    min-height: 0; /* 关键：允许日志内容区域收缩 */
+    overflow-y: auto; /* 启用垂直滚动 */
     padding: 8px;
     font-family: monospace;
     font-size: 11px;
     line-height: 1.4;
     background: var(--bg);
-}
-
-.log-entry {
-    margin-bottom: 2px;
-    padding: 2px 0;
-}
-
-.log-entry.success {
-    color: var(--success);
-}
-
-.log-entry.error {
-    color: #f44336;
-}
-
-.log-entry.info {
-    color: var(--fg-primary);
 }
 
 .large-batch-actions {
@@ -1264,6 +1378,7 @@ a.button {
     justify-content: center;
     padding-top: 12px;
     border-top: 1px solid var(--border);
+    flex-shrink: 0; /* 防止操作按钮区域被压缩 */
 }
 
 /* 响应式调整 */
