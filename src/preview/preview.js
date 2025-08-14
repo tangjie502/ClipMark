@@ -48,10 +48,38 @@ class MarkdownPreview {
             this.copySource();
         });
         
+        // Obsidian上传按钮事件
+        document.getElementById('uploadToObsidianBtn').addEventListener('click', () => {
+            this.showObsidianModal();
+        });
+        
+        // Obsidian模态框事件
+        document.getElementById('obsidianModalClose')?.addEventListener('click', () => {
+            this.closeObsidianModal();
+        });
+        
+        document.getElementById('cancelUploadBtn')?.addEventListener('click', () => {
+            this.closeObsidianModal();
+        });
+        
+        document.getElementById('confirmUploadBtn')?.addEventListener('click', () => {
+            this.performUpload();
+        });
+        
+        // 监听文件名和文件夹输入变化，更新预览
+        document.getElementById('obsidianFileName')?.addEventListener('input', () => {
+            this.updateFilePathPreview();
+        });
+        
+        document.getElementById('obsidianFolder')?.addEventListener('input', () => {
+            this.updateFilePathPreview();
+        });
+        
         // 键盘事件
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
+                this.closeObsidianModal();
             }
         });
         
@@ -362,6 +390,304 @@ class MarkdownPreview {
     closeModal() {
         const modal = document.getElementById('sourceModal');
         modal.style.display = 'none';
+    }
+    
+    // 显示Obsidian上传模态框
+    async showObsidianModal() {
+        if (!this.markdownContent) {
+            this.showUploadMessage('没有内容可以上传', 'error');
+            return;
+        }
+        
+        // 获取Obsidian配置以检查是否已配置
+        const config = await this.getObsidianConfig();
+        if (!this.validateObsidianConfig(config)) {
+            this.showUploadMessage('请先在扩展设置中配置Obsidian API', 'error');
+            return;
+        }
+        
+        // 预填充默认值
+        const fileNameInput = document.getElementById('obsidianFileName');
+        const folderInput = document.getElementById('obsidianFolder');
+        
+        if (fileNameInput) {
+            let defaultName = this.documentTitle || '未命名文档';
+            // 移除.md扩展名（如果存在）
+            defaultName = defaultName.replace(/\.md$/i, '');
+            fileNameInput.value = defaultName;
+        }
+        
+        if (folderInput && config.folder) {
+            folderInput.value = config.folder;
+        }
+        
+        // 更新文件路径预览
+        this.updateFilePathPreview();
+        
+        // 显示模态框
+        const modal = document.getElementById('obsidianModal');
+        modal.style.display = 'flex';
+    }
+    
+    // 关闭Obsidian模态框
+    closeObsidianModal() {
+        const modal = document.getElementById('obsidianModal');
+        modal.style.display = 'none';
+    }
+    
+    // 更新文件路径预览
+    updateFilePathPreview() {
+        const fileNameInput = document.getElementById('obsidianFileName');
+        const folderInput = document.getElementById('obsidianFolder');
+        const preview = document.getElementById('filePathPreview');
+        
+        if (!preview) return;
+        
+        let fileName = fileNameInput?.value.trim() || '未命名文档';
+        const folder = folderInput?.value.trim() || '';
+        
+        // 确保文件名有.md扩展名
+        if (!fileName.endsWith('.md')) {
+            fileName += '.md';
+        }
+        
+        // 构建完整路径
+        let fullPath = fileName;
+        if (folder) {
+            fullPath = `${folder}/${fileName}`;
+        }
+        
+        preview.textContent = fullPath;
+    }
+    
+    // 执行上传
+    async performUpload() {
+        try {
+            const confirmBtn = document.getElementById('confirmUploadBtn');
+            const originalText = confirmBtn.innerHTML;
+            
+            // 禁用按钮并显示加载状态
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '🔄 上传中...';
+            
+            // 获取用户输入
+            const fileNameInput = document.getElementById('obsidianFileName');
+            const folderInput = document.getElementById('obsidianFolder');
+            
+            let fileName = fileNameInput?.value.trim() || this.documentTitle || '未命名文档';
+            const folder = folderInput?.value.trim() || '';
+            
+            // 确保文件名有.md扩展名
+            if (!fileName.endsWith('.md')) {
+                fileName += '.md';
+            }
+            
+            // 获取Obsidian配置
+            const config = await this.getObsidianConfig();
+            
+            // 如果用户指定了文件夹，使用用户指定的
+            if (folder) {
+                config.folder = folder;
+            }
+            
+            // 调用Obsidian API上传
+            const result = await this.uploadToObsidianAPI(config, fileName, this.markdownContent);
+            
+            if (result.success) {
+                this.showUploadMessage(`成功上传到Obsidian: ${fileName}`, 'success');
+                this.closeObsidianModal();
+            } else {
+                this.showUploadMessage(`上传失败: ${result.message}`, 'error');
+            }
+            
+        } catch (error) {
+            console.error('上传到Obsidian失败:', error);
+            this.showUploadMessage(`上传失败: ${error.message}`, 'error');
+        } finally {
+            // 恢复按钮状态
+            const confirmBtn = document.getElementById('confirmUploadBtn');
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '🔮 确认上传';
+        }
+    }
+    
+    // 获取Obsidian配置
+    async getObsidianConfig() {
+        try {
+            // 从扩展存储获取配置
+            const result = await browser.storage.sync.get([
+                'obsidianApiUrl',
+                'obsidianApiKey', 
+                'obsidianApiSecure',
+                'obsidianVault',
+                'obsidianFolder'
+            ]);
+            
+            return {
+                apiUrl: result.obsidianApiUrl || 'http://127.0.0.1:27123',
+                apiKey: result.obsidianApiKey || '',
+                apiSecure: result.obsidianApiSecure || false,
+                vault: result.obsidianVault || '',
+                folder: result.obsidianFolder || ''
+            };
+        } catch (error) {
+            console.error('获取Obsidian配置失败:', error);
+            return null;
+        }
+    }
+    
+    // 验证Obsidian配置
+    validateObsidianConfig(config) {
+        if (!config || !config.apiUrl) {
+            return false;
+        }
+        // API密钥是可选的，取决于Obsidian设置
+        return true;
+    }
+    
+    // 生成文件名
+    generateFileName() {
+        let fileName = this.documentTitle || '未命名文档';
+        
+        // 清理文件名，移除不允许的字符
+        fileName = fileName
+            .replace(/[<>:"/\\|?*]/g, '') // 移除Windows不允许的字符
+            .replace(/[[\]#^]/g, '') // 移除可能与Obsidian冲突的字符
+            .trim();
+            
+        // 如果文件名为空，使用时间戳
+        if (!fileName) {
+            const now = new Date();
+            fileName = `网页剪藏-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}-${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}`;
+        }
+        
+        // 确保文件名以.md结尾
+        if (!fileName.endsWith('.md')) {
+            fileName += '.md';
+        }
+        
+        return fileName;
+    }
+    
+    // 调用Obsidian API上传文件
+    async uploadToObsidianAPI(config, fileName, content) {
+        try {
+            const apiUrl = config.apiUrl.replace(/\/$/, ''); // 移除末尾斜杠
+            let uploadPath = fileName;
+            
+            // 如果指定了文件夹，添加到路径中
+            if (config.folder) {
+                uploadPath = `${config.folder}/${fileName}`;
+            }
+            
+            const headers = {
+                'Content-Type': 'text/plain'
+            };
+            
+            // 如果有API密钥，添加授权头
+            if (config.apiKey) {
+                headers['Authorization'] = `Bearer ${config.apiKey}`;
+            }
+            
+            console.log('=== 上传到Obsidian ===');
+            console.log('API地址:', `${apiUrl}/vault/${uploadPath}`);
+            console.log('文件路径:', uploadPath);
+            console.log('内容长度:', content.length);
+            
+            const response = await fetch(`${apiUrl}/vault/${uploadPath}`, {
+                method: 'PUT',
+                headers: headers,
+                body: content,
+                mode: 'cors'
+            });
+            
+            console.log('=== Obsidian API 响应 ===');
+            console.log('状态码:', response.status);
+            console.log('状态文本:', response.statusText);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+            }
+            
+            // 尝试解析响应
+            let responseData;
+            try {
+                responseData = await response.json();
+            } catch (e) {
+                // 某些成功响应可能不是JSON格式
+                responseData = { success: true };
+            }
+            
+            return {
+                success: true,
+                message: '上传成功',
+                data: responseData
+            };
+            
+        } catch (error) {
+            console.error('Obsidian API调用失败:', error);
+            return {
+                success: false,
+                message: error.message
+            };
+        }
+    }
+    
+    // 显示上传消息
+    showUploadMessage(message, type = 'info') {
+        // 创建或更新消息显示区域
+        let messageDiv = document.getElementById('uploadMessage');
+        if (!messageDiv) {
+            messageDiv = document.createElement('div');
+            messageDiv.id = 'uploadMessage';
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 8px;
+                font-weight: 500;
+                z-index: 1000;
+                max-width: 300px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                transition: all 0.3s ease;
+            `;
+            document.body.appendChild(messageDiv);
+        }
+        
+        // 设置消息样式
+        switch(type) {
+            case 'success':
+                messageDiv.style.backgroundColor = '#d4edda';
+                messageDiv.style.color = '#155724';
+                messageDiv.style.border = '1px solid #c3e6cb';
+                break;
+            case 'error':
+                messageDiv.style.backgroundColor = '#f8d7da';
+                messageDiv.style.color = '#721c24';
+                messageDiv.style.border = '1px solid #f5c6cb';
+                break;
+            default:
+                messageDiv.style.backgroundColor = '#d1ecf1';
+                messageDiv.style.color = '#0c5460';
+                messageDiv.style.border = '1px solid #bee5eb';
+        }
+        
+        messageDiv.textContent = message;
+        messageDiv.style.display = 'block';
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+            if (messageDiv) {
+                messageDiv.style.opacity = '0';
+                setTimeout(() => {
+                    if (messageDiv && messageDiv.parentNode) {
+                        messageDiv.parentNode.removeChild(messageDiv);
+                    }
+                }, 300);
+            }
+        }, 3000);
     }
     
     // 复制源码
