@@ -23,6 +23,7 @@ browser.runtime.getPlatformInfo().then(async platformInfo => {
 });
 
 // Initialize listeners synchronously
+console.log('=== SERVICE WORKER: 注册消息监听器 ===');
 browser.runtime.onMessage.addListener(handleMessages);
 browser.contextMenus.onClicked.addListener(handleContextMenuClick);
 browser.commands.onCommand.addListener(handleCommands);
@@ -37,115 +38,140 @@ const activeDownloads = new Map();
 /**
  * Handle messages from content scripts and popup
  */
-async function handleMessages(message, sender, sendResponse) {
-  switch (message.type) {
-    case "clip":
-      await handleClipRequest(message, sender.tab?.id);
-      break;
-    case "download":
-      await handleDownloadRequest(message);
-      break;
-    case "download-images":
-      await handleImageDownloads(message);
-      break;
-    case "download-images-content-script":
-      await handleImageDownloadsContentScript(message);
-      break;
-    case "offscreen-ready":
-      // The offscreen document is ready - no action needed
-      break;
-    case "markdown-result":
-      await handleMarkdownResult(message);
-      break;
-    case "download-complete":
-      handleDownloadComplete(message);
-      break;
-    case "execute-script-in-tab":
-      await executeScriptInTab(message.tabId, message.code);
-      break;
-
-    case "get-tab-content":
-      await getTabContentForOffscreen(message.tabId, message.selection, message.requestId);
-      break;
-      
-    case "batch-links-selected":
-      await handleBatchLinksSelected(message);
-      break;
-      
-    case "start-link-selection-from-popup":
-      await startLinkSelectionFromPopup(message);
-      break;
-      
-    case "extract-for-preview":
-      await extractContentForPreview(message, sendResponse);
-      break;
-
-    case "get-batch-status":
-      await handleGetBatchStatus(message, sendResponse);
-      break;
-
-    case "cancel-large-batch":
-      await handleCancelLargeBatch();
-      break;
-
-    case "pause-large-batch":
-      await handlePauseLargeBatch();
-      break;
-
-    case "resume-large-batch":
-      await handleResumeLargeBatch();
-      break;
-
-    case "forward-get-article-content":
-      await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
-      break;
-
-    case "execute-content-download":
-      await executeContentDownload(message.tabId, message.filename, message.content);
-      break;
-      
-    // 新增：处理 Obsidian 相关消息
-    case "obsidian-success":
-      await handleObsidianSuccess(message.message);
-      break;
-      
-    case "obsidian-error":
-      await handleObsidianError(message.error, message.fallback);
-      break;
-      
-    case "open-obsidian-uri":
-      await handleOpenObsidianUri(message.url);
-      break;
-    case "test-obsidian-connection":
-      console.log('收到测试连接消息:', message);
-      console.log('sendResponse 类型:', typeof sendResponse);
-      console.log('sendResponse 是否函数:', typeof sendResponse === 'function');
-      
-      // 直接处理异步操作，不使用包装函数
-      handleTestObsidianConnection(message.options, sender, sendResponse)
-        .then(testResult => {
-          console.log('测试连接处理完成，结果:', testResult);
-        })
-        .catch(error => {
-          console.error('测试连接处理异常:', error);
-          if (sendResponse && typeof sendResponse === 'function') {
-            sendResponse({
-              success: false,
-              message: `处理异常: ${error.message}`
-            });
-          }
-        });
-      
-      // 立即返回 true 保持消息通道开放
-      return true;
+function handleMessages(message, sender, sendResponse) {
+  console.log('=== SERVICE WORKER: handleMessages 被调用 ===');
+  console.log('消息类型:', message.type);
+  console.log('消息内容:', message);
+  console.log('发送者:', sender);
+  console.log('sendResponse 函数:', typeof sendResponse);
+  
+  // 添加简单的ping测试
+  if (message.type === "ping-test") {
+    console.log('=== SERVICE WORKER: 收到ping测试 ===');
+    sendResponse({ success: true, message: 'pong', timestamp: Date.now() });
+    return true;
   }
   
-  // 对于需要异步处理响应的消息类型，使用Promise
+  // 移除test-obsidian-connection消息处理，现在使用直接HTTP请求
+  
+  if (message.type === "get-batch-status") {
+    (async () => {
+      try {
+        await handleGetBatchStatus(message, sendResponse);
+      } catch (error) {
+        console.error('=== SERVICE WORKER: get-batch-status 处理失败 ===', error);
+        try {
+          sendResponse({
+            success: false,
+            message: `批处理状态获取失败: ${error.message}`,
+            error: error.toString()
+          });
+        } catch (sendError) {
+          console.error('=== SERVICE WORKER: get-batch-status 错误响应发送失败 ===', sendError);
+        }
+      }
+    })();
+    return true;
+  }
+  
   if (message.type === "extract-for-preview") {
-    return true; // 这个消息类型需要异步处理
+    (async () => {
+      try {
+        await extractContentForPreview(message, sendResponse);
+      } catch (error) {
+        console.error('=== SERVICE WORKER: extract-for-preview 处理失败 ===', error);
+        try {
+          sendResponse({
+            success: false,
+            message: `内容提取失败: ${error.message}`,
+            error: error.toString()
+          });
+        } catch (sendError) {
+          console.error('=== SERVICE WORKER: extract-for-preview 错误响应发送失败 ===', sendError);
+        }
+      }
+    })();
+    return true;
   }
   
-  // 其他消息类型不需要响应
+  // 对于不需要sendResponse的消息，使用异步IIFE处理
+  (async () => {
+    switch (message.type) {
+      case "clip":
+        await handleClipRequest(message, sender.tab?.id);
+        break;
+      case "download":
+        await handleDownloadRequest(message);
+        break;
+      case "download-images":
+        await handleImageDownloads(message);
+        break;
+      case "download-images-content-script":
+        await handleImageDownloadsContentScript(message);
+        break;
+      case "offscreen-ready":
+        // The offscreen document is ready - no action needed
+        break;
+      case "markdown-result":
+        await handleMarkdownResult(message);
+        break;
+      case "download-complete":
+        handleDownloadComplete(message);
+        break;
+      case "execute-script-in-tab":
+        await executeScriptInTab(message.tabId, message.code);
+        break;
+
+      case "get-tab-content":
+        await getTabContentForOffscreen(message.tabId, message.selection, message.requestId);
+        break;
+        
+      case "batch-links-selected":
+        await handleBatchLinksSelected(message);
+        break;
+        
+      case "start-link-selection-from-popup":
+        await startLinkSelectionFromPopup(message);
+        break;
+
+      case "cancel-large-batch":
+        await handleCancelLargeBatch();
+        break;
+
+      case "pause-large-batch":
+        await handlePauseLargeBatch();
+        break;
+
+      case "resume-large-batch":
+        await handleResumeLargeBatch();
+        break;
+
+      case "forward-get-article-content":
+        await forwardGetArticleContent(message.tabId, message.selection, message.originalRequestId);
+        break;
+
+      case "execute-content-download":
+        await executeContentDownload(message.tabId, message.filename, message.content);
+        break;
+        
+      // 新增：处理 Obsidian 相关消息
+      case "obsidian-success":
+        await handleObsidianSuccess(message.message);
+        break;
+        
+      case "obsidian-error":
+        await handleObsidianError(message.error, message.fallback);
+        break;
+        
+      case "open-obsidian-uri":
+        await handleOpenObsidianUri(message.url);
+        break;
+    }
+  })().catch(error => {
+    console.error('Error in message handler:', error);
+  });
+  
+  // 对于已处理的异步消息，不需要额外的return
   return false;
 }
 
@@ -1379,10 +1405,43 @@ async function handleBatchLinksSelected(message) {
     }
     
     // 转换为URL对象格式（兼容批量转换逻辑）
-    const urlObjects = selectedLinks.map(link => ({
+    const allUrlObjects = selectedLinks.map(link => ({
       url: link.url,
       title: link.text && link.text.trim() ? link.text.trim() : null
     }));
+    
+    // 过滤掉受保护的URLs
+    const urlObjects = allUrlObjects.filter(urlObj => {
+      const url = urlObj.url;
+      const isRestrictedUrl = url.startsWith('chrome://') || 
+                            url.startsWith('chrome-extension://') || 
+                            url.startsWith('moz-extension://') || 
+                            url.startsWith('edge://') || 
+                            url.startsWith('about:') || 
+                            url.startsWith('file://');
+      
+      if (isRestrictedUrl) {
+        console.log(`跳过受保护的URL: ${url}`);
+      }
+      
+      return !isRestrictedUrl;
+    });
+    
+    // 如果所有URLs都被过滤掉了
+    if (urlObjects.length === 0) {
+      console.warn('所有URLs都是受保护的页面，无法进行批量处理');
+      await browser.runtime.sendMessage({
+        type: 'batch-processing-error',
+        message: '所有选择的链接都是受保护的页面，无法进行批量处理。\n\n请选择普通网页链接进行批量转换。'
+      });
+      return;
+    }
+    
+    // 如果有URLs被过滤掉，通知用户
+    if (urlObjects.length < allUrlObjects.length) {
+      const filteredCount = allUrlObjects.length - urlObjects.length;
+      console.log(`已过滤掉 ${filteredCount} 个受保护的URL，将处理剩余的 ${urlObjects.length} 个URL`);
+    }
     
     // 检查是否是大批量处理（超过20个URL）
     const isLargeBatch = urlObjects.length > 20;
@@ -2241,10 +2300,12 @@ async function formatObsidianFolder(article, options = null) {
 
 /**
  * 处理 Obsidian 连接测试
+ * 注意：此函数已废弃，现在使用options.js中的直接HTTP请求方式
  */
+/*
 async function handleTestObsidianConnection(options, sender, sendResponse) {
   try {
-    console.log('开始测试 Obsidian API 连接...');
+    console.log('handleTestObsidianConnection: 开始测试 Obsidian API 连接...');
     
     // 创建 Obsidian API 服务实例
     const obsidianApi = new ObsidianApiService(options);
@@ -2252,19 +2313,12 @@ async function handleTestObsidianConnection(options, sender, sendResponse) {
     // 测试连接
     const result = await obsidianApi.testConnection();
     
-    console.log('连接测试结果:', result);
+    console.log('handleTestObsidianConnection: 连接测试结果:', result);
     
-    // 确保立即调用 sendResponse
-    if (sendResponse && typeof sendResponse === 'function') {
-      console.log('调用 sendResponse 返回结果:', result);
-      sendResponse(result);
-    } else {
-      console.error('sendResponse 不可用！');
-    }
-    
+    // 不在这里调用 sendResponse，而是返回结果
     return result;
   } catch (error) {
-    console.error('连接测试失败:', error);
+    console.error('handleTestObsidianConnection: 连接测试失败:', error);
     
     const errorResult = {
       success: false,
@@ -2275,14 +2329,7 @@ async function handleTestObsidianConnection(options, sender, sendResponse) {
       }
     };
     
-    // 确保立即调用 sendResponse
-    if (sendResponse && typeof sendResponse === 'function') {
-      console.log('调用 sendResponse 返回错误结果:', errorResult);
-      sendResponse(errorResult);
-    } else {
-      console.error('sendResponse 不可用！');
-    }
-    
     return errorResult;
   }
 }
+*/

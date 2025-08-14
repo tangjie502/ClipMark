@@ -598,6 +598,22 @@ async function startPageLinkSelection(e) {
             return;
         }
         
+        const url = tabs[0].url;
+        
+        // 检查是否为受保护的页面
+        const isRestrictedUrl = url.startsWith('chrome://') || 
+                              url.startsWith('chrome-extension://') || 
+                              url.startsWith('moz-extension://') || 
+                              url.startsWith('edge://') || 
+                              url.startsWith('about:') || 
+                              url.startsWith('file://');
+        
+        if (isRestrictedUrl) {
+            showError(new Error('无法在此页面上使用链接选择功能\n\n' +
+                              '请在普通网页上使用此功能。'), false);
+            return;
+        }
+        
         const currentTab = tabs[0];
         
         // 向service worker发送启动链接选择的请求
@@ -979,6 +995,20 @@ const clipSite = id => {
             active: true
         }).then(tabs => {
             if (tabs && tabs.length > 0) {
+                // 检查是否为受保护的页面
+                const url = tabs[0].url;
+                const isRestrictedUrl = url.startsWith('chrome://') || 
+                                      url.startsWith('chrome-extension://') || 
+                                      url.startsWith('moz-extension://') || 
+                                      url.startsWith('edge://') || 
+                                      url.startsWith('about:') || 
+                                      url.startsWith('file://');
+                
+                if (isRestrictedUrl) {
+                    throw new Error('无法在此页面上使用ClipMark扩展\n\n' +
+                                  '请在普通网页上使用此扩展。');
+                }
+                
                 return clipSite(tabs[0].id);
             }
             throw new Error("No active tab found");
@@ -1052,6 +1082,24 @@ browser.storage.sync.get(defaultOptions).then(options => {
 }).then((tabs) => {
     var id = tabs[0].id;
     var url = tabs[0].url;
+    
+    // 检查是否为受保护的页面
+    const isRestrictedUrl = url.startsWith('chrome://') || 
+                          url.startsWith('chrome-extension://') || 
+                          url.startsWith('moz-extension://') || 
+                          url.startsWith('edge://') || 
+                          url.startsWith('about:') || 
+                          url.startsWith('file://');
+    
+    if (isRestrictedUrl) {
+        showError(new Error('无法在此页面上使用ClipMark扩展\n\n' +
+                          '请在普通网页上使用此扩展，例如：\n' +
+                          '• 新闻网站\n' +
+                          '• 博客文章\n' +
+                          '• 文档页面\n\n' +
+                          '系统页面（chrome://、about: 等）不支持扩展功能。'), false);
+        return;
+    }
     
     // Use scripting API instead of executeScript
     browser.scripting.executeScript({
@@ -1208,13 +1256,93 @@ function showError(err, useEditor = true) {
     document.getElementById("spinner").style.display = 'none';
     
     console.error('Error:', err);
-    if (useEditor) {
-        // 在新的UI中显示错误
+    
+    // 检查是否为URL限制错误
+    const isUrlRestrictionError = err.message && (
+        err.message.includes('无法在此页面上使用ClipMark扩展') ||
+        err.message.includes('请在普通网页上使用') ||
+        err.message.includes('受保护的页面')
+    );
+    
+    if (isUrlRestrictionError) {
+        // 为URL限制错误显示特殊的友好界面
+        showUrlRestrictionMessage(err.message);
+    } else if (useEditor) {
+        // 在新的UI中显示其他错误
         updatePreviewStatus('提取失败', `错误: ${err}`);
     } else {
         // 批量处理错误
         console.error('Batch processing error:', err);
+        // 也在UI中显示批量处理错误
+        updatePreviewStatus('批量处理失败', `错误: ${err.message || err}`);
     }
+}
+
+function showUrlRestrictionMessage(message) {
+    // 创建友好的URL限制提示界面
+    const previewContent = `
+        <div style="text-align: center; padding: 40px 20px; color: #666;">
+            <div style="font-size: 48px; margin-bottom: 16px;">🚫</div>
+            <h3 style="color: #333; margin-bottom: 16px;">页面不支持</h3>
+            <p style="line-height: 1.6; margin-bottom: 24px;">${message.replace(/\n/g, '<br>')}</p>
+            <div style="background: #f8f9fa; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                <h4 style="color: #495057; margin-bottom: 12px;">💡 建议操作：</h4>
+                <ul style="text-align: left; color: #6c757d; line-height: 1.8;">
+                    <li>打开一个普通网页（如新闻、博客、文档页面）</li>
+                    <li>然后再次点击ClipMark扩展图标</li>
+                    <li>或者尝试使用右键菜单功能</li>
+                </ul>
+            </div>
+            <button id="openSamplePage" style="
+                background: #007bff; 
+                color: white; 
+                border: none; 
+                padding: 12px 24px; 
+                border-radius: 6px; 
+                cursor: pointer;
+                font-size: 14px;
+                margin-right: 12px;
+            ">打开示例页面</button>
+            <button id="closePopup" style="
+                background: #6c757d; 
+                color: white; 
+                border: none; 
+                padding: 12px 24px; 
+                border-radius: 6px; 
+                cursor: pointer;
+                font-size: 14px;
+            ">关闭</button>
+        </div>
+    `;
+    
+    // 显示在预览区域
+    updatePreviewStatus('页面限制', previewContent);
+    
+    // 绑定按钮事件
+    setTimeout(() => {
+        const openSampleBtn = document.getElementById('openSamplePage');
+        const closeBtn = document.getElementById('closePopup');
+        
+        if (openSampleBtn) {
+            openSampleBtn.addEventListener('click', () => {
+                // 打开一个示例页面
+                browser.tabs.create({ 
+                    url: 'https://example.com',
+                    active: true 
+                }).then(() => {
+                    window.close();
+                }).catch(err => {
+                    console.error('Failed to open sample page:', err);
+                });
+            });
+        }
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                window.close();
+            });
+        }
+    }, 100);
 }
 
 // 更新消息监听器以处理新的提取内容响应
@@ -1222,6 +1350,11 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "content-extracted") {
         // 处理提取的内容
         handleExtractedContent(message);
+        return Promise.resolve({success: true});
+    } else if (message.type === "batch-processing-error") {
+        // 处理批量处理错误
+        console.log('收到批量处理错误:', message.message);
+        showError(new Error(message.message), false);
         return Promise.resolve({success: true});
     }
     

@@ -594,11 +594,19 @@ window.save = function() {
 function bindTestButtonEvent() {
     const testConnectionBtn = document.getElementById('testObsidianConnection');
     if (testConnectionBtn) {
+        // 检查是否已经绑定了事件
+        if (testConnectionBtn.hasAttribute('data-event-bound')) {
+            console.log('测试按钮事件已绑定，跳过');
+            return;
+        }
+        
         console.log('找到测试按钮，绑定事件');
         testConnectionBtn.addEventListener('click', async () => {
             console.log('测试按钮被点击');
             await testObsidianConnection();
         });
+        // 标记事件已绑定
+        testConnectionBtn.setAttribute('data-event-bound', 'true');
     } else {
         console.warn('测试按钮未找到，将在下次刷新时重试');
         // 如果按钮还没创建，稍后重试
@@ -607,7 +615,7 @@ function bindTestButtonEvent() {
 }
 
 /**
- * 测试 Obsidian API 连接
+ * 测试 Obsidian API 连接 - 使用直接HTTP请求
  */
 async function testObsidianConnection() {
     try {
@@ -626,69 +634,142 @@ async function testObsidianConnection() {
         
         // 获取当前配置
         const options = getCurrentFormData();
+        const apiUrl = options.obsidianApiUrl || 'http://127.0.0.1:27123';
+        const apiKey = options.obsidianApiKey || '';
+        const useHttps = options.obsidianApiSecure || false;
         
-        console.log('开始测试连接，配置:', {
-            apiUrl: options.obsidianApiUrl,
-            apiSecure: options.obsidianApiSecure,
-            hasApiKey: !!options.obsidianApiKey
+        console.log('=== OPTIONS 页面：开始直接测试Obsidian连接 ===');
+        console.log('API地址:', apiUrl);
+        console.log('使用HTTPS:', useHttps);
+        console.log('有API密钥:', !!apiKey);
+        
+        // 构建请求头
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        // 如果有API密钥，添加授权头
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        
+        console.log('=== OPTIONS 页面：发送HTTP请求 ===');
+        
+        // 发送直接HTTP请求到Obsidian REST API
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: headers,
+            mode: 'cors', // 允许跨域
+            cache: 'no-cache' // 不使用缓存
         });
         
-        // 发送测试消息到 service worker
-        console.log('发送测试消息到 service worker...');
-        console.log('消息内容:', { type: 'test-obsidian-connection', options: options });
+        console.log('=== OPTIONS 页面：收到HTTP响应 ===');
+        console.log('响应状态:', response.status);
+        console.log('响应状态文本:', response.statusText);
+        console.log('响应头:', Object.fromEntries(response.headers.entries()));
         
-        console.log('准备发送消息到 service worker...');
-        
-        // 尝试最简单的方式
-        let result;
-        try {
-            console.log('发送消息...');
-            result = await browser.runtime.sendMessage({
-                type: 'test-obsidian-connection',
-                options: options
-            });
-            console.log('sendMessage 直接返回:', result);
-        } catch (error) {
-            console.error('sendMessage 出错:', error);
-            throw error;
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        console.log('最终结果:', result);
-        console.log('响应类型:', typeof result);
-        console.log('响应是否为空:', result === null || result === undefined);
-        console.log('响应是否有 success 属性:', result && result.hasOwnProperty('success'));
+        // 解析JSON响应
+        const data = await response.json();
+        console.log('=== OPTIONS 页面：解析响应数据 ===', data);
         
-        // 检查结果是否有效
-        if (!result) {
-            throw new Error('未收到有效的测试结果');
+        // 检查响应格式是否符合Obsidian API
+        if (data.service !== 'Obsidian Local REST API') {
+            throw new Error('响应不是来自Obsidian Local REST API');
         }
         
-        // 显示结果
+        // 判断连接状态
+        const isConnected = data.status === 'OK';
+        const isAuthenticated = data.authenticated === true;
+        const obsidianVersion = data.versions?.obsidian || '未知';
+        const pluginVersion = data.versions?.self || data.manifest?.version || '未知';
+        
+        console.log('=== OPTIONS 页面：连接测试结果 ===', {
+            isConnected,
+            isAuthenticated,
+            obsidianVersion,
+            pluginVersion
+        });
+        
+        // 显示成功结果
         resultDiv.style.display = 'block';
-        if (result.success) {
-            resultDiv.innerHTML = `
-                <div style="color: #4caf50; padding: 8px; background: #e8f5e8; border-radius: 4px; border: 1px solid #4caf50;">
-                    ✅ ${result.message}
+        resultDiv.innerHTML = `
+            <div style="color: #4caf50; padding: 12px; background: #e8f5e8; border-radius: 6px; border: 1px solid #4caf50; font-family: 'Segoe UI', Arial, sans-serif;">
+                <div style="font-weight: bold; margin-bottom: 8px;">
+                    ✅ Obsidian API 连接成功
                 </div>
-            `;
-        } else {
-            resultDiv.innerHTML = `
-                <div style="color: #f44336; padding: 8px; background: #ffebee; border-radius: 4px; border: 1px solid #f44336;">
-                    ❌ ${result.message}
-                    ${result.details ? `<br><small>详细信息: ${JSON.stringify(result.details)}</small>` : ''}
+                <div style="font-size: 14px; line-height: 1.5;">
+                    <div><strong>状态:</strong> ${data.status}</div>
+                    <div><strong>服务:</strong> ${data.service}</div>
+                    <div><strong>认证状态:</strong> ${isAuthenticated ? '✅ 已认证' : '⚠️ 未认证'}</div>
+                    <div><strong>Obsidian版本:</strong> ${obsidianVersion}</div>
+                    <div><strong>插件版本:</strong> ${pluginVersion}</div>
+                    ${data.manifest?.name ? `<div><strong>插件名称:</strong> ${data.manifest.name}</div>` : ''}
                 </div>
-            `;
-        }
+                ${!isAuthenticated && apiKey ? 
+                    '<div style="margin-top: 8px; padding: 6px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; font-size: 12px;">⚠️ 提供了API密钥但未认证，请检查密钥是否正确</div>' : 
+                    ''
+                }
+            </div>
+        `;
         
     } catch (error) {
-        console.error('连接测试失败:', error);
+        console.error('=== OPTIONS 页面：连接测试失败 ===', error);
         
         const resultDiv = document.getElementById('connectionTestResult');
         if (resultDiv) {
             resultDiv.style.display = 'block';
+            
+            // 根据错误类型提供更详细的信息
+            let errorMessage = error.message;
+            let troubleshooting = '';
+            
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                errorMessage = '网络连接失败';
+                troubleshooting = `
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        <strong>可能的原因:</strong><br>
+                        • Obsidian未运行或Local REST API插件未启用<br>
+                        • API地址或端口配置错误<br>
+                        • 防火墙阻止了连接<br>
+                        • CORS策略限制
+                    </div>
+                `;
+            } else if (error.message.includes('HTTP 401')) {
+                errorMessage = 'API密钥认证失败';
+                troubleshooting = `
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        <strong>解决方案:</strong><br>
+                        • 检查API密钥是否正确<br>
+                        • 确认在Obsidian中已启用API密钥认证
+                    </div>
+                `;
+            } else if (error.message.includes('HTTP 404')) {
+                errorMessage = 'API端点不存在';
+                troubleshooting = `
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        <strong>解决方案:</strong><br>
+                        • 检查API地址是否正确<br>
+                        • 确认Local REST API插件版本是否兼容
+                    </div>
+                `;
+            }
+            
             resultDiv.innerHTML = `
-                <div style="color: #f44336; padding: 8px; background: #ffebee; border-radius: 4px; border: 1px solid #f44336;">
-                    ❌ 测试失败: ${error.message}
+                <div style="color: #f44336; padding: 12px; background: #ffebee; border-radius: 6px; border: 1px solid #f44336; font-family: 'Segoe UI', Arial, sans-serif;">
+                    <div style="font-weight: bold; margin-bottom: 8px;">
+                        ❌ 连接失败: ${errorMessage}
+                    </div>
+                    ${troubleshooting}
+                    <details style="margin-top: 8px; font-size: 12px;">
+                        <summary style="cursor: pointer; color: #666;">显示技术详情</summary>
+                        <div style="margin-top: 4px; padding: 6px; background: #f5f5f5; border-radius: 3px; font-family: monospace; word-break: break-all;">
+                            ${error.toString()}
+                        </div>
+                    </details>
                 </div>
             `;
         }
