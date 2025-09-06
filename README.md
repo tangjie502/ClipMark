@@ -74,7 +74,7 @@
 
 1. **下载源码**
    ```bash
-   git clone https://github.com/tang'jie/clipmark-extension.git
+   git clone https://github.com/tangjie502/clipmark-extension.git
    cd clipmark-extension
    ```
 
@@ -297,14 +297,6 @@ ClipMark基于以下优秀的开源项目：
 
 本项目采用 [GPL-3.0 许可证](LICENSE)。
 
----
-
-## 📞 联系方式
-
-- **作者**: Dhruv Parikh
-- **邮箱**: dhruvjparikh28@gmail.com
-- **项目主页**: [GitHub Repository](https://github.com/tangjie502/clipmark-extension)
-- **问题反馈**: [Issues](https://github.com/tangjie502/clipmark-extension/issues)
 
 ---
 
