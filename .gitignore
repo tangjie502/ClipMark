@@ -8,3 +8,9 @@ node_modules
 .cursor/rules/messaging-api.mdc
 .cursor/rules/project-structure.mdc
 .cursor/rules/ui-components.mdc
+/.idea/ClipMark.iml
+/.idea/editorJumperProjectSettings.xml
+/.idea/modules.xml
+/.idea/vcs.xml
+/.github/
+/.idea/

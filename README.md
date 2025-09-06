@@ -57,20 +57,8 @@
 
 ---
 
-## 📱 安装
 
-### 🏪 从扩展商店安装（推荐）
-
-#### Chrome / Edge
-[![Chrome Web Store](https://img.shields.io/badge/Chrome-Install-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/marksnip-markdown-web-cli/kcbaglhfgbkjdnpeokaamjjkddempipm?hl=en)
-
-#### Firefox
-[![Firefox Add-ons](https://img.shields.io/badge/Firefox-Install-FF7139?style=for-the-badge&logo=firefox&logoColor=white)](#)
-
-#### Safari
-查看 `xcode/` 目录获取Safari版本
-
-### 📦 手动安装
+## 📦 手动安装
 
 1. **下载源码**
    ```bash
@@ -249,9 +237,6 @@ ClipMark/
 
 我们欢迎所有形式的贡献！
 
-### 🐛 报告问题
-- 使用[GitHub Issues](https://github.com/tangjie502/clipmark-extension/issues)
-- 请提供详细的复现步骤和环境信息
 
 ### 💡 功能建议
 - 在Issues中提出新功能建议
