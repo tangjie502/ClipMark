@@ -4,71 +4,102 @@ function notifyExtension() {
 }
 
 function getHTMLOfDocument() {
-    // make sure a title tag exists so that pageTitle is not empty and
-    // a filename can be genarated.
-    if (document.head.getElementsByTagName('title').length == 0) {
-        let titleEl = document.createElement('title');
-        // prepate a good default text (the text displayed in the window title)
-        titleEl.innerText = document.title;
-        document.head.append(titleEl);
-    }
+    return new Promise((resolve) => {
+        // Step 1: Find all "Expand Code" buttons.
+        const expandButtons = document.querySelectorAll('button[data-dumi-tooltip="展开代码"]');
 
-    // if the document doesn't have a "base" element make one
-    // this allows the DOM parser in future steps to fix relative uris
+        // If no such buttons exist, assume it's not a Dumi page and use a simple fallback.
+        if (expandButtons.length === 0) {
+            // We also check for the "Collapse Code" button, in case some are already expanded.
+            const collapseButtons = document.querySelectorAll('button[data-dumi-tooltip="收起代码"]');
+            if (collapseButtons.length === 0) {
+                resolve(document.documentElement.outerHTML);
+                return;
+            }
+        }
 
-    let baseEls = document.head.getElementsByTagName('base');
-    let baseEl;
+        // Step 2: Click all expand buttons to trigger the insertion of code blocks into the DOM.
+        expandButtons.forEach(button => button.click());
 
-    if (baseEls.length > 0) {
-        baseEl = baseEls[0];
-    } else {
-        baseEl = document.createElement('base');
-        document.head.append(baseEl);
-    }
+        // After clicking, we need to wait for the code blocks to appear.
+        // The number of code blocks should eventually equal the total number of demo sections.
+        const totalDemos = document.querySelectorAll('.dumi-default-previewer').length;
+        const codeBlockSelector = '.dumi-default-source-code';
+        const timeout = 3000; // 3-second timeout
+        const interval = 100;
+        let elapsedTime = 0;
 
-    // make sure the 'base' element always has a good 'href`
-    // attribute so that the DOMParser generates usable
-    // baseURI and documentURI properties when used in the
-    // background context.
+        const timer = setInterval(() => {
+            const codeBlocks = document.querySelectorAll(codeBlockSelector);
+            
+            // Once the number of visible code blocks matches the total number of demos, we can proceed.
+            if (codeBlocks.length >= totalDemos) {
+                clearInterval(timer);
 
-    let href = baseEl.getAttribute('href');
+                // Step 4: Now that the code is in the DOM, use the selective extraction logic.
+                const article = document.querySelector('.dumi-default-content article');
+                if (article) {
+                    const newDoc = document.implementation.createHTMLDocument(document.title);
+                    const newBody = newDoc.body;
+                    const base = newDoc.createElement('base');
+                    base.href = window.location.href;
+                    newDoc.head.appendChild(base);
+                    newDoc.head.appendChild(newDoc.createElement('title')).textContent = document.title;
 
-    if (!href || !href.startsWith(window.location.origin)) {
-        baseEl.setAttribute('href', window.location.href);
-    }
-
-    // remove the hidden content from the page
-    removeHiddenNodes(document.body);
-
-    // get the content of the page as a string
-    return document.documentElement.outerHTML;
-}
-
-// code taken from here: https://www.reddit.com/r/javascript/comments/27bcao/anyone_have_a_method_for_finding_all_the_hidden/
-function removeHiddenNodes(root) {
-    let nodeIterator, node,i = 0;
-
-    nodeIterator = document.createNodeIterator(root, NodeFilter.SHOW_ELEMENT, function(node) {
-      let nodeName = node.nodeName.toLowerCase();
-      if (nodeName === "script" || nodeName === "style" || nodeName === "noscript" || nodeName === "math") {
-        return NodeFilter.FILTER_REJECT;
-      }
-      if (node.offsetParent === void 0) {
-        return NodeFilter.FILTER_ACCEPT;
-      }
-      let computedStyle = window.getComputedStyle(node, null);
-      if (computedStyle.getPropertyValue("visibility") === "hidden" || computedStyle.getPropertyValue("display") === "none") {
-        return NodeFilter.FILTER_ACCEPT;
-      }
+                    article.childNodes.forEach(node => {
+                        if (node.nodeType !== Node.ELEMENT_NODE) return;
+                        if (node.classList.contains('dumi-default-previewer')) {
+                            const preTag = node.querySelector('pre.prism-code');
+                            if (preTag) {
+                                let titleNode = node.previousElementSibling;
+                                if (titleNode && (titleNode.tagName === 'H3' || titleNode.tagName === 'H4')) {
+                                    newBody.appendChild(titleNode.cloneNode(true));
+                                }
+                                const newPre = newDoc.createElement('pre');
+                                const newCode = newDoc.createElement('code');
+                                const langClass = Array.from(preTag.classList).find(c => c.startsWith('language-'));
+                                if (langClass) {
+                                    newCode.className = langClass;
+                                }
+                                newCode.textContent = preTag.innerText;
+                                newPre.appendChild(newCode);
+                                newBody.appendChild(newPre);
+                            }
+                        } else if (node.classList.contains('markdown')) {
+                            node.childNodes.forEach(child => {
+                                let shouldClone = true;
+                                if (child.nodeType === Node.ELEMENT_NODE && (child.tagName === 'H3' || child.tagName === 'H4')) {
+                                    const nextEl = child.nextElementSibling;
+                                    if (nextEl && nextEl.classList.contains('dumi-default-previewer')) {
+                                        shouldClone = false;
+                                    }
+                                }
+                                if (shouldClone) {
+                                    newBody.appendChild(child.cloneNode(true));
+                                }
+                            });
+                        } else {
+                            newBody.appendChild(node.cloneNode(true));
+                        }
+                    });
+                    resolve(newDoc.documentElement.outerHTML);
+                } else {
+                    // Fallback if the main article isn't found
+                    resolve(document.documentElement.outerHTML);
+                }
+            } else {
+                elapsedTime += interval;
+                if (elapsedTime >= timeout) {
+                    clearInterval(timer);
+                    // Fallback if code blocks don't appear in time. Just resolve with what we have.
+                    // This might happen if some code blocks fail to load, but it's better than nothing.
+                    console.warn('ClipMark: Timed out waiting for all Dumi code blocks to appear.');
+                    resolve(document.documentElement.outerHTML);
+                }
+            }
+        }, interval);
     });
-
-    while ((node = nodeIterator.nextNode()) && ++i) {
-      if (node.parentNode instanceof HTMLElement) {
-        node.parentNode.removeChild(node);
-      }
-    }
-    return root
-  }
+}
 
 // code taken from here: https://stackoverflow.com/a/5084044/304786
 function getHTMLOfSelection() {
@@ -96,9 +127,9 @@ function getHTMLOfSelection() {
     }
 }
 
-function getSelectionAndDom() {
+async function getSelectionAndDom() {
     try {
-      const dom = getHTMLOfDocument();
+      const dom = await getHTMLOfDocument();
       const selection = getHTMLOfSelection();
       
       if (!dom) {
