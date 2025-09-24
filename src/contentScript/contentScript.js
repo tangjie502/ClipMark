@@ -61,7 +61,7 @@ function getHTMLOfDocument() {
                                 if (langClass) {
                                     newCode.className = langClass;
                                 }
-                                newCode.textContent = preTag.textContent;
+                                newCode.textContent = preTag.innerText;
                                 newPre.appendChild(newCode);
                                 newBody.appendChild(newPre);
                             }
